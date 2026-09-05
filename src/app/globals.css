@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
+
+  --color-ink: #2b2419;
+  --color-ink-2: #5a5040;
+  --color-ink-3: #8a8070;
+  --color-line: #e9e0d2;
+  --color-line-strong: #d8c9b3;
+  --color-ground: #f7f2e9;
+  --color-surface: #ffffff;
+  --color-surface-2: #fbf8f2;
+
+  --color-brand: #543c00;
+  --color-brand-deep: #3a2900;
+  --color-brand-soft: #f1e6d5;
+  --color-brand-tint: #f8f1e5;
+
+  --color-ok: #0e8a5f;
+  --color-ok-soft: #e3f5ec;
+  --color-warn: #b4550a;
+  --color-warn-soft: #fff1e1;
+  --color-info: #2457c5;
+  --color-info-soft: #e8effc;
+  --color-danger: #d23b3b;
+  --color-danger-soft: #fdecec;
+  --color-kakao: #fee500;
+  --color-kakao-ink: #191919;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-card: 0 1px 2px rgb(26 25 48 / 0.04), 0 8px 24px -16px rgb(26 25 48 / 0.16);
+  --shadow-pop: 0 12px 40px -12px rgb(26 25 48 / 0.28);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 단일 강조 모션: 대시보드 핵심 숫자만 한 번 올라온다 */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-once {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* 네이티브 select 화살표 정리 */
+select.ui-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2377768e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
