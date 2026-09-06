@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import type { Announcement } from "@/lib/types";
 import { DEMO_PROFILE, deriveFacts, useProfile } from "@/lib/profile";
 import { countByStatus, matchAll } from "@/lib/matching";
+import { relativeTime } from "@/lib/format";
 import { AnnouncementList, isUrgent, type ListTab } from "./AnnouncementList";
 import { SummaryTiles, type SummaryKey } from "./SummaryTiles";
 import { ButtonLink, Container } from "./ui";
 
-export function DashboardView({ items }: { items: Announcement[] }) {
+export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; lastSyncedAt: string | null }) {
   const { profile, isLoggedIn } = useProfile();
   const p = profile ?? DEMO_PROFILE;
   const [tab, setTab] = useState<ListTab>("all");
@@ -60,6 +61,10 @@ export function DashboardView({ items }: { items: Announcement[] }) {
           onSelect={(k) => setTab(tab === k ? "all" : k)}
         />
       </section>
+
+      {lastSyncedAt && (
+        <p className="mt-4 text-[13px] text-ink-3">마지막 갱신 {relativeTime(lastSyncedAt)}</p>
+      )}
 
       <div className="mt-6">
         <AnnouncementList

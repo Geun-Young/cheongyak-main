@@ -1,7 +1,10 @@
-export type AgencyCode = "LH" | "SH" | "GH" | "IH" | "BMC" | "PRIVATE";
+export type AgencyCode = "LH" | "SH" | "GH" | "IH" | "BMC" | "PRIVATE" | "UNKNOWN";
 
 export type HousingType =
   | "국민임대"
+  | "영구임대"
+  | "50년임대"
+  | "통합공공임대"
   | "행복주택"
   | "매입임대"
   | "전세임대"
@@ -95,7 +98,25 @@ export interface SupplyUnit {
   eligibility: Condition[];
   tiers: Tier[];
   scoreRules: ScoreRule[];
+  /** 수집기가 소스에서 더 이상 이 유닛을 못 찾으면 false. 삭제하지 않고 숨기기만 한다 */
+  active?: boolean;
 }
+
+/**
+ * 공고 하나에 대한 상태값 두 가지.
+ *
+ * status(공개 여부, 원칙적으로 수집기가 결정):
+ *   published = 사용자에게 보임 / closed = 접수 마감(마감 탭에만) /
+ *   hidden = 관리자가 숨김(중복·오류) / draft = 관리자가 손으로 만드는 중
+ * reviewStatus(판정 가능 여부, 원칙적으로 관리자가 결정):
+ *   pending = 자격요건 없음("확인 필요") / ready = 판정 동작 /
+ *   recheck = ready였는데 소스 값이 바뀌어 재확인 필요
+ *
+ * 두 축이 독립이라 "공개는 됐지만 아직 판정은 안 되는" published+pending 조합이 정상 상태다.
+ * 자세한 배경은 청약순위계산기_공고자동수집_설계서.md 3장.
+ */
+export type AnnouncementStatus = "draft" | "published" | "closed" | "hidden";
+export type ReviewStatus = "ready" | "pending" | "recheck";
 
 export interface Announcement {
   id: string;
@@ -103,12 +124,15 @@ export interface Announcement {
   agency: { code: AgencyCode; name: string };
   /** 대표 주택유형(목록 필터·칩 표시용). 유닛마다 다르면 상세 페이지에서 유닛 값이 우선한다 */
   housingType: HousingType;
-  region: Region | "전국";
+  /** 지역 매핑에 실패하면 null(관리자 큐로). "전국"으로 뭉개면 모두에게 잘못 노출되므로 쓰지 않는다 */
+  region: Region | "전국" | null;
   district: string;
   /** 세대수 총합(= supplyUnits의 unitsCount 합). 목록 카드 표시용으로 필드명을 유지한다 */
   units: number;
-  /** 관리자가 사람 말로 정리한 공고 전체 요약 3~5줄 */
-  summary: string[];
+  /** 관리자가 정리한 요약. null이면 화면에서 autoSummary로 대체 표시한다 */
+  summary: string[] | null;
+  /** 수집기가 소스 필드로 조립한 자동 요약. summary가 채워지면 화면에선 무시된다 */
+  autoSummary?: string[];
   announcedAt: string;
   applyStart: string;
   applyEnd: string;
@@ -121,11 +145,17 @@ export interface Announcement {
   originalUrlKind?: "notice" | "list" | "home";
   /** 대표 순위 산정 방식(목록 칩 표시용) */
   rankingMethod: RankingMethod;
-  /** pending이면 조건이 아직 정리되지 않아 "확인 필요" */
-  reviewStatus: "ready" | "pending";
-  status: "draft" | "published" | "closed";
+  status: AnnouncementStatus;
+  reviewStatus: ReviewStatus;
   /** 이 공고에 속한 공급유닛들. 최소 1개 이상이어야 한다 */
   supplyUnits: SupplyUnit[];
+
+  // --- 자동수집 메타(설계서 4장) ---
+  /** 데이터 출처. "manual"은 관리자가 직접 만든 공고 */
+  source?: "myhome" | "applyhome" | "manual";
+  sourceId?: string;
+  /** "조건 정리되면 알려주세요" 버튼을 누른 회원 수. 관리자 큐 정렬 기준 */
+  requestCount?: number;
 }
 
 export type EligibilityStatus = "eligible" | "ineligible" | "needs_review" | "closed";

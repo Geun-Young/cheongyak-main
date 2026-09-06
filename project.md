@@ -10,9 +10,9 @@
 
 - **UI**: 목업 단계를 지나 Supabase 기반 실서비스 배관이 연결됨.
 - **인증**: 아직 없음. `/admin/*`는 로그인 게이트 없이 열려 있음(TODO로 표시해둠).
-- **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있음. 전부 자격요건이 비어 있어 `draft`/`확인 필요` 상태 — 일반 사용자 화면(RLS가 `published`만 공개)에는 아직 하나도 안 보임.
+- **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있고, **전부 `published + pending` 상태로 일반 사용자 화면에 바로 노출됨** (자격요건은 비어 있어 "확인 필요"로 표시). 하루 3회 GitHub Actions 크론으로 자동 재수집되도록 구성됨(Secrets 등록은 아직 사용자가 해야 함).
 - **지도**: 자리(placeholder)만 있고 실제 지도는 아직 안 붙음.
-- **다음으로 할 일 후보**: 관리자 조건 검수 UX, 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증.
+- **다음으로 할 일 후보**: GitHub Actions Secrets 등록, 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증.
 
 ---
 
@@ -107,24 +107,60 @@ Next.js 16 + React 19 + Tailwind v4로 만든 **UI 껍데기(목업)**. 공고 1
 
 ---
 
+### 8. 공고 자동수집 재설계 — "관리자가 열어야 보인다"는 병목 제거
+
+사용자가 [청약순위계산기_공고자동수집_설계서.md](청약순위계산기_공고자동수집_설계서.md)를 제공 → 그 설계를 그대로 반영해 6번 단계에서 만든 수집기를 재설계.
+
+**진단(설계서 그대로 채택)**: 문제는 수집이 아니라 정책이었음. 조건 없는 공고도 UI는 이미 "확인 필요"로 그릴 수 있는데, 수집 단계에서 `draft`로 넣어버려 그 상태를 못 쓰고 있었음. → **소스가 주는 사실은 기계가, 해석(조건·요약·순위)은 사람이. 둘은 같은 행의 다른 칸에 산다.**
+
+**결정한 것** (설계서 12장 "결정이 필요한 항목" 5개, 전부 설계서 제안대로 채택):
+1. 자동 공개 정책: 전체 자동공개(신뢰 기관 화이트리스트 방식 아님)
+2. 마감 후 노출 기간: 30일
+3. 유형 세분화: 영구임대·50년임대·통합공공임대를 국민임대로 뭉개지 않고 별도 `HousingType`으로 분리
+4. pending 공고 알림: 기본값 꺼짐(옵션으로만)
+5. 매입임대 유닛 병합: 면적·보증금·월세·주소 해시로 그룹핑
+
+**작업 전 확인**: 설계서 0번이 "Supabase 작업물이 어디에도 없다(다른 저장소 `chan-hee1102/cheongyak` 참고)"고 전제했으나, 실제로는 이 세션(`Geun-Young/cheongyak-main`)에서 한 작업이 로컬에 그대로 있었고 단지 커밋을 안 한 상태였음 — 확인 후 그 전제는 무시하고 먼저 전체 커밋+push(`b246889`)한 뒤 이어서 진행.
+
+**구현**:
+- **타입 확장**(`types.ts`): `HousingType`에 영구임대/50년임대/통합공공임대 추가, `AgencyCode`에 `UNKNOWN` 추가, `Announcement.status`에 `hidden` 추가, `reviewStatus`에 `recheck` 추가, `region`을 `Region | "전국" | null`로(매핑 실패 시 "전국"으로 뭉개지 않음), `summary`를 `string[] | null` + `autoSummary?: string[]`로 분리(관리자 요약 vs 수집기 자동요약), `source`/`sourceId`/`requestCount` 추가, `SupplyUnit.active` 추가.
+- **마이그레이션 0002**(`supabase/migrations/0002_ingest_ownership.sql`): status/review_status/agency_code CHECK 제약 확장, summary nullable화 + auto_summary 컬럼, housing_type_src(소스 원문 보존), region nullable화, source/source_id/source_hash/first_seen_at/last_seen_at/source_updated_at, admin_note/reviewed_at/reviewed_by, request_count, supply_units.active + source_hash, `ingest_runs` 테이블 신설. RLS를 `published`에서 `published, closed` 공개로 확장. 실행 후 GRANT + `notify pgrst,'reload schema'` 필요했음(0001 때와 동일 패턴).
+- **수집기 전면 재작성**(`lib/ingest/myhome.ts`): 해시 기반 변경 감지(FNV-1a 계열 `simpleHash`, 외부 패키지 없이 구현), houseSn 기반/필드그룹 기반 유닛 생성 분기, 결정적 자동요약 생성(`buildAutoSummary`, LLM 없이 소스 필드로 3~4문장 조립), 지역 매핑 실패 시 null(전국으로 뭉개지 않음), 기관 매핑 실패 시 UNKNOWN, API 요청 재시도(최대 5회, 지수 백오프) — 공공데이터포털 API가 세션 중 실제로 여러 번 504/타임아웃을 냈어서 견고성이 필요했음.
+- **소스/관리자 칸 분리 upsert**(`scripts/lib/ingest-upsert.ts` 신규): `applyIngestedAnnouncements()`가 신규는 insert(published+pending 초기값), 기존은 "소스 소유 칸만" 명시적으로 update — status/review_status/summary/eligibility 등 관리자 칸은 컬럼 목록에 아예 없어서 구조적으로 못 건드림. 해시가 같으면 last_seen_at만, 다르면 소스 칸 갱신 + `ready`였으면 `recheck`로 자동 전환. 사라진 유닛은 삭제 대신 `active=false`. `autoCloseExpiredAnnouncements()`는 KST 자정 기준으로 마감 처리(서버 UTC 기준으로 하면 9시간 일찍 마감되는 문제 방지).
+- **안전장치**: `scripts/ingest-myhome.ts`가 직전 성공 run의 `fetched` 대비 이번 응답이 50% 미만이면 자동 마감 단계를 건너뛰고 `partial`로 종료 — API 장애로 빈 응답이 왔을 때 멀쩡한 공고들이 우르르 마감 처리되는 걸 막음. `ingest_runs`에 매 실행 기록.
+- **데이터 조회 레이어 갱신**(`lib/data/announcements.ts`): `getAnnouncements()`가 이제 `published`+`closed`를 함께 가져오되 마감 30일 지난 건 쿼리에서 제외, 비활성(`active=false`) 유닛은 일반 조회에서 필터링(관리자 조회는 포함). 관리자 목록 정렬을 `request_count desc → apply_end asc`로(설계서 7장 큐 정렬 기준). `getLastSuccessfulIngestAt()` 신규(대시보드 "마지막 갱신" 표시용).
+- **사용자 UI**: `MatchPanel`의 `needs_review` 문구를 "접수기간·임대료는 확인됐어요 + 원문 확인 버튼"으로 개선, `recheck` 상태면 "변경됨" 배지 + 안내문 추가. "조건 정리되면 알려주세요" 버튼(`RequestReviewButton` 신규, `/api/announcements/[id]/request-review` 신규 — 지금은 인증 없이 누구나 호출 가능한 임시 구현, TODO로 명시) 추가. 대시보드에 "마지막 갱신 N분 전" 표시 추가.
+- **관리자 UI**: 목록에 재확인/매핑실패/요청수 집계와 컬럼 추가, `hidden` 상태 표시 지원. (필터 탭·다중 유닛 조건 복사 등 설계서 7장의 나머지는 아직 — 지금은 지표 가시성만 개선한 상태.)
+- **스케줄러**: `.github/workflows/ingest.yml` 신규 — KST 08:10/13:10/18:10 하루 3회 + 수동 실행(`workflow_dispatch`), `concurrency: ingest`로 겹침 방지. **저장소 Secrets(`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATA_GO_KR_API_KEY`) 등록은 아직 안 됨 — 등록 전까지는 크론이 등록만 되어 있고 실제로 돌지 않는다.**
+
+**실행 검증**: 기존 mock 129건(구 로직, status=draft)을 삭제하고 새 로직으로 재수집 → **129건 전부 신규 insert, status=published**로 들어감. anon key로 조회 시 이전엔 0건이었던 게 이제 **129건 전체가 보임**을 직접 확인 — 이게 이번 재설계의 핵심 목표("관리자 개입 없이 목록 갱신")가 실제로 달성됐다는 증거. 재수집(idempotency, unchanged 카운트) 검증은 이 세션 중 공공데이터포털 API가 여러 차례 불안정(504/커넥션 타임아웃)해서 완료하지 못함 — 다음 세션에서 재검증 필요.
+
 ## 아직 안 한 것 / 다음 단계 후보
 
-- **관리자 조건 검수 UX**: 지금 129건은 전부 자격요건이 비어 있음. 관리자가 하나씩 열어 조건빌더로 채우고 게시해야 실제로 판정이 동작함. 지금 조건빌더는 유닛 1개만 편집 가능 — 다중 유닛(마이홈포털 데이터의 58건이 다중 유닛) 편집 UI가 없어서 이 부분부터 막힐 수 있음.
+- **GitHub Actions Secrets 등록**: `.github/workflows/ingest.yml`은 만들어졌지만 저장소 Settings → Secrets에 `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`가 아직 등록 안 됨 — 등록 전까지 자동 크론이 실제로 돌지 않는다.
+- **재수집 idempotency 실증 검증**: `applyIngestedAnnouncements()`의 "해시 같으면 unchanged, 다르면 recheck 전환" 로직은 코드 리뷰 수준으로는 맞지만, 실제로 같은 데이터를 두 번 수집했을 때 unchanged로 잡히는지는 API 불안정으로 이번 세션에서 확인 못 함.
+- **관리자 큐 UI 완성**: 설계서 7장의 필터 탭(pending/recheck/매핑실패/중복의심/완료), 행 단위 액션(숨기기·유형 고치기·조건 템플릿 적용), 다중 유닛 조건 복사("첫 유닛 조건을 나머지에 복사")는 아직 — 지금은 집계 숫자와 컬럼 표시만 있음. 마이홈 데이터 58건이 다중 유닛이라 이게 없으면 검수 속도가 느림.
+- **판정 조건 실제 입력**: 129건 전부 `reviewStatus: pending`(자격요건 없음) — 관리자가 조건빌더로 채워야 실제 판정(순위·가점)이 동작. 지금 조건빌더는 유닛 1개만 편집 가능.
 - **청약홈(민간 APT) 연동**: 스펙 확보·1건 실호출까지 끝났고 어댑터 코드만 남음.
 - **PDF→LLM 조건 추출**: 사람이 조건을 일일이 입력하는 대신, 공고문 PDF나 원문 링크에서 자동 추출하는 파이프라인. 아직 손 안 댐.
+- **"조건 정리되면 알려주세요" 버튼 인증**: 지금은 로그인 여부·중복 클릭 방지 없이 누구나 호출 가능(`request_count`만 증가) — 회원 인증이 붙으면 사용자당 1회로 제한 필요.
 - **카카오맵 SDK 실연동**: `UnitLocationCard`에 자리만 파놓음. 실제 지도 렌더링, 주소→좌표 지오코딩 없음.
-- **인증(이메일/카카오)**: `/admin/*`에 로그인 게이트가 없어 지금은 `service_role`로 우회 중 — 보안상 임시 조치. 카카오 디벨로퍼스 앱 등록도 아직 안 함(지도 키와 로그인 키를 같은 계정에서 함께 받을 수 있음).
-- **DB 비밀번호 재발급 확인**: 마이그레이션 과정에서 대화에 노출된 Supabase DB 비밀번호를 재발급했는지 미확인.
+- **인증(이메일/카카오)**: `/admin/*`에 로그인 게이트가 없어 지금은 `service_role`로 우회 중 — 보안상 임시 조치, **배포 금지 조건**(설계서 10장). 카카오 디벨로퍼스 앱 등록도 아직 안 함.
+- **DB 비밀번호 재발급 확인**: 마이그레이션 과정에서 대화에 여러 번 노출된 Supabase DB 비밀번호를 아직 재발급 안 함(사용자가 "재발급 안 하고 기존 걸로 진행" 선택).
 - **실데이터 소득기준표**: 여전히 2025년 자리표시 값(`INCOME_100_BY_HOUSEHOLD`).
+- **Vercel 배포 후**: `/api/cron/ingest` 라우트 + Vercel Cron으로 전환(설계서 6-2). 지금은 GitHub Actions만.
 
 ---
 
 ## 알아두면 유용한 것들 (이 프로젝트 고유의 함정)
 
 - **`middleware.ts`가 아니라 `proxy.ts`**. Next.js 16의 브레이킹 체인지. 외부 라이브러리(Supabase 등) 가이드를 그대로 복붙하면 조용히 안 먹힌다.
-- **`tsc --noEmit` 단독 실행은 `RouteContext` 타입 에러를 낸다** (Next.js가 빌드 시 자동 생성하는 타입이라서). 이 프로젝트에서 타입 검증은 `next build`까지 해야 정확하다.
+- **`tsc --noEmit` 단독 실행은 `RouteContext` 타입 에러를 낸다** (Next.js가 빌드 시 자동 생성하는 타입이라서). 이 프로젝트에서 타입 검증은 `next build`까지 해야 정확하다 — 새 API 라우트를 추가한 직후엔 특히 먼저 `next build`부터 돌려야 한다.
 - **`cookies()`가 async**다(Next.js 15+). Supabase 서버 클라이언트도 이를 반영해 `await cookies()`로 작성돼 있음.
-- **RLS가 `status='published'`만 공개**한다 — 새 데이터를 넣었는데 화면에 안 보이면 버그가 아니라 `status`/`review_status`부터 확인.
+- **RLS는 `status in ('published','closed')`만 공개**한다(0002부터, 이전엔 published만) — 새 데이터를 넣었는데 화면에 안 보이면 버그가 아니라 `status`/`review_status`부터 확인. `getAnnouncements()`는 여기에 더해 마감 30일 지난 건을 애플리케이션 레벨에서 추가로 거른다.
 - **관리자 페이지는 지금 `service_role`로 우회 중**이라 인증 없이도 `/admin/*`이 열림 — 배포 전 반드시 인증 게이트 필요.
-- **마이홈포털 API의 매입임대(다가구주택) 데이터는 개별 유닛 식별자가 없다** — id는 배열 순번으로 임시 구분 중.
-- **Windows 환경 팁**: `taskkill //PID <pid> //F`로 종료(POSIX `kill`이 안 먹는 프로세스가 있음), `netstat -ano | grep PORT`로 실제 PID 확인.
+- **마이홈포털 공공데이터 API는 세션 중 여러 번 504/커넥션 타임아웃을 냈다** — 우리 코드 문제가 아니라 그쪽 서버의 간헐적 불안정. `lib/ingest/myhome.ts`가 재시도(5회, 지수 백오프)로 대응하지만, 그래도 실패하면 며칠 안에 재시도하면 된다.
+- **자동수집이 관리자 작업을 덮어쓰면 안 된다는 원칙**: `scripts/lib/ingest-upsert.ts`가 신규(insert)와 기존(update) 행을 분리하고, update는 "소스 소유 칸"만 명시적으로 나열한 컬럼 목록으로 한다 — status/review_status/summary/eligibility 등은 그 목록에 아예 없어서 코드 구조상 못 건드린다. 새 소스 필드를 추가할 때 이 upsert 헬퍼도 같이 갱신해야 한다.
+- **마이홈포털 API의 매입임대(다가구주택) 데이터는 개별 유닛 식별자가 없다** — 면적·보증금·월세·주소 해시로 그룹핑해서 유닛을 만든다(`toUnitsByFieldGroup`).
+- **KST 기준 날짜 비교**: 자동 마감(`autoCloseExpiredAnnouncements`)은 서버가 어느 시간대에서 돌든 KST 자정 기준으로 비교하도록 `Date.now() + 9시간` 오프셋을 쓴다. 서버 UTC 기준으로 그냥 비교하면 9시간 일찍 마감된다.
+- **Windows 환경 팁**: `taskkill //PID <pid> //F`로 종료(POSIX `kill`이 안 먹는 프로세스가 있음), `netstat -ano | grep PORT`로 실제 PID 확인. Bash 도구에서 `command &`로 백그라운드 실행한 것은 세션이 끊기면 같이 죽을 수 있다 — 진짜 오래 걸리는 작업은 `run_in_background: true` 옵션을 쓰고 셸 안에서 `&`를 겹쳐 쓰지 않는다.

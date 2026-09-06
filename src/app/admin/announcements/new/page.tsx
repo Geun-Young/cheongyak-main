@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileText, Save, Send } from "lucide-react";
 import type { Announcement, HousingType, RankingMethod } from "@/lib/types";
+import { displaySummary } from "@/lib/announcement-display";
 import { HOUSING_TYPES, REGIONS } from "@/lib/regions";
 import { ConditionBuilder, type BuilderRow } from "@/components/ConditionBuilder";
 import { Button, Card, Chip, Container, Field, Input, PageTitle, Select, Textarea } from "@/components/ui";
@@ -44,7 +45,7 @@ function initialForm(a?: Announcement): FormState {
     moveIn: a?.supplyUnits[0]?.moveIn ?? "",
     rentNote: a?.supplyUnits[0]?.rentNote ?? "",
     originalUrl: a?.originalUrl ?? "",
-    summary: a?.summary.join("\n") ?? "",
+    summary: a ? displaySummary(a).join("\n") : "",
     ranking: a?.rankingMethod ?? "순위+가점",
   };
 }

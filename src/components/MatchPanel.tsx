@@ -7,6 +7,7 @@ import { useGuestProfile } from "@/lib/guest";
 import { checkCondition, matchUnit } from "@/lib/matching";
 import { describeFact } from "@/lib/fields";
 import { StatusBadge } from "./StatusBadge";
+import { RequestReviewButton } from "./RequestReviewButton";
 import { ButtonLink, Card, cx } from "./ui";
 
 export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
@@ -41,10 +42,20 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
       )}>
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={r.status} />
+          {a.reviewStatus === "recheck" && (
+            <span className="rounded-full bg-info-soft px-2.5 py-1 text-[12px] font-semibold text-info">
+              변경됨
+            </span>
+          )}
           <span className="text-sm text-ink-3">
             {isGuest ? "빠른 필터로 입력한 임시 조건 기준" : `${p.name}님 정보 기준`}
           </span>
         </div>
+        {a.reviewStatus === "recheck" && r.status !== "needs_review" && (
+          <p className="mt-2 text-sm text-info">
+            공고 내용이 바뀌어 다시 확인 중이에요. 위 판정은 이전 조건 기준이니 원문도 함께 확인하세요.
+          </p>
+        )}
 
         {r.status === "eligible" && (
           <div className="mt-3">
@@ -94,7 +105,13 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         {r.status === "needs_review" && (
           <div className="mt-3">
             <p className="text-xl font-bold text-ink">조건을 정리하고 있어요.</p>
-            <p className="mt-1 text-sm text-ink-2">공고문의 자격 요건과 배점표를 구조화하는 중이에요. 끝나면 알림으로 판정을 보내드릴게요.</p>
+            <p className="mt-1 text-sm text-ink-2">
+              접수기간·임대료는 확인됐어요. 자격 요건과 배점표는 아직 구조화하는 중이에요. 정리되면 알림으로 판정을 보내드릴게요.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <ButtonLink href={a.originalUrl} external>원문 공고문에서 자격요건 확인하기</ButtonLink>
+              {!isGuest && <RequestReviewButton announcementId={a.id} />}
+            </div>
           </div>
         )}
 

@@ -3,16 +3,20 @@
  * https://www.data.go.kr/data/15108420/openapi.do
  * 엔드포인트: apis.data.go.kr/1613000/HWSPR02/{rsdtRcritNtcList|ltRsdtRcritNtcList}
  *
- * 이 API는 공고 목록만 준다 — 자격요건(소득·무주택기간 등)은 포함하지 않는다.
- * 그래서 여기서 만든 공고는 항상 reviewStatus: "pending"으로 들어가고,
- * 관리자가 조건빌더에서 자격요건을 채워야 "확인 필요" 상태를 벗어난다.
- *
- * 같은 pblancId(공고번호) 안에 houseSn(단지 일련번호)이 여러 개면 한 공고 안의
- * 서로 다른 공급유닛(SupplyUnit)이다 — 우리 스키마의 공고→유닛 계층과 그대로 대응된다.
+ * 설계: 청약순위계산기_공고자동수집_설계서.md
+ * - 이 API는 자격요건을 안 준다. 대신 "공개 여부"와 "판정 가능 여부"를 분리해서,
+ *   수집된 공고는 published+pending으로 즉시 노출하고 조건만 "확인 필요"로 비워둔다.
+ * - 같은 pblancId(공고번호) 안에 houseSn(단지 일련번호)이 여러 개면 그게 곧 SupplyUnit.
+ * - 매입임대(다가구주택)는 houseSn이 전부 0이고 이름·주소가 비어 있어, 면적·보증금·월세·주소
+ *   해시로 같은 물건을 묶는다(그룹핑 규칙은 설계서 5-2, 결정 항목 5번 채택).
+ * - 재수집 시 관리자가 이미 정리한 칸(status/reviewStatus/summary/eligibility 등)은
+ *   절대 덮어쓰지 않는다 — 이 모듈은 "소스 소유 칸"에 해당하는 값만 만들어 반환하고,
+ *   실제 upsert 시 어떤 컬럼을 덮어쓸지는 scripts/ingest-myhome.ts가 명시적으로 정한다.
  */
 import type { Announcement, AgencyCode, HousingType, Region, SupplyUnit } from "@/lib/types";
 
 const BASE_URL = "https://apis.data.go.kr/1613000/HWSPR02";
+export const SOURCE = "myhome" as const;
 
 interface MyHomeItem {
   pblancId: string;
@@ -57,7 +61,6 @@ function toIsoDate(yyyymmdd: string): string {
   return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 }
 
-/** "경기도" -> "경기", "전남광주통합특별시" 같은 특이 케이스는 REGIONS에 없으면 원문 유지 */
 const BRTC_TO_REGION: Record<string, Region> = {
   서울특별시: "서울",
   부산광역시: "부산",
@@ -80,29 +83,30 @@ const BRTC_TO_REGION: Record<string, Region> = {
   제주특별자치도: "제주",
 };
 
-function toRegion(brtcNm: string): Region | "전국" {
-  return BRTC_TO_REGION[brtcNm] ?? "전국";
+/** 매핑 실패 시 "전국"으로 뭉개지 않는다 — 모두에게 잘못 노출되는 것보다 null로 큐에 남기는 게 낫다(설계서 5-2) */
+function toRegion(brtcNm: string): Region | null {
+  return BRTC_TO_REGION[brtcNm] ?? null;
 }
 
-/** 공급기관명 텍스트에서 코드를 추정한다. 알 수 없으면 PRIVATE으로 보수적으로 처리 */
+/** 공급기관명 텍스트에서 코드를 추정한다. 매핑 실패 시 UNKNOWN으로 두고 관리자 큐로 보낸다(PRIVATE으로 단정하지 않는다) */
 function toAgencyCode(suplyInsttNm: string): AgencyCode {
   if (suplyInsttNm.includes("LH")) return "LH";
   if (suplyInsttNm.includes("SH")) return "SH";
   if (suplyInsttNm.includes("GH") || suplyInsttNm.includes("경기주택")) return "GH";
   if (suplyInsttNm.includes("iH") || suplyInsttNm.includes("인천도시")) return "IH";
   if (suplyInsttNm.includes("부산도시")) return "BMC";
-  return "PRIVATE";
+  return "UNKNOWN";
 }
 
 /**
- * 공급유형 텍스트 -> HousingType. API의 공급유형 코드표(영구임대·50년임대·10년임대·6년임대·
- * 5년임대·통합공공임대 등)가 우리 enum보다 세분화되어 있어 가장 가까운 값으로 근사 매핑한다.
- * 원문 표기는 유닛 이름에 그대로 남겨 정보 손실을 보완한다.
+ * 공급유형 텍스트 -> HousingType. 영구임대·50년임대·통합공공임대는 국민임대로 뭉개지 않고
+ * 별도 유형으로 세분화한다(설계서 결정 항목 3번 채택) — 사용자에게 실제와 다른 유형을
+ * 보여주면 신뢰가 깨진다는 게 이유.
  */
 const SUPLY_TY_TO_HOUSING_TYPE: Record<string, HousingType> = {
-  영구임대: "국민임대",
+  영구임대: "영구임대",
   국민임대: "국민임대",
-  "50년임대": "국민임대",
+  "50년임대": "50년임대",
   매입임대: "매입임대",
   "10년임대": "매입임대",
   "6년임대": "매입임대",
@@ -111,7 +115,7 @@ const SUPLY_TY_TO_HOUSING_TYPE: Record<string, HousingType> = {
   전세임대: "전세임대",
   행복주택: "행복주택",
   공공지원민간임대: "공공지원민간임대",
-  통합공공임대: "국민임대",
+  통합공공임대: "통합공공임대",
 };
 
 function toHousingType(suplyTyNm: string): HousingType {
@@ -126,14 +130,46 @@ function buildRentNote(item: MyHomeItem): string | undefined {
   return parts.length > 0 ? parts.join(" / ") : undefined;
 }
 
-const SOURCE_PREFIX = "myhome";
+/** 유닛 하나가 소스에서 실제로 바뀌었는지 판단하는 해시. 이름 없는 필드 조합이라 순서 고정 */
+function hashUnitFields(item: MyHomeItem): string {
+  const raw = [
+    item.hsmpNm,
+    item.fullAdres,
+    item.sumSuplyCo,
+    item.totHshldCo,
+    item.rentGtn,
+    item.mtRntchrg,
+    item.enty,
+    item.suplyTyNm,
+  ].join("|");
+  return simpleHash(raw);
+}
 
-function toUnit(item: MyHomeItem, indexInGroup: number): SupplyUnit {
-  // houseSn만으로는 유닛을 구분 못 하는 공고가 있다(예: 매입임대 다가구주택은
-  // houseSn이 전부 0이고 이름·주소도 비어 있음 — 물건별로 비식별화된 것으로 보인다).
-  // 그런 경우를 대비해 그룹 내 순번을 id에 함께 넣어 충돌을 막는다.
+/** 암호학적 강도가 필요 없는 변경 감지용 해시(FNV-1a 계열) — 외부 패키지 없이 충분하다 */
+function simpleHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+export interface IngestedUnit extends SupplyUnit {
+  sourceHash: string;
+}
+
+export interface IngestedAnnouncement extends Omit<Announcement, "supplyUnits"> {
+  supplyUnits: IngestedUnit[];
+  sourceHash: string;
+}
+
+/**
+ * houseSn이 유닛을 구분해 주는 일반 케이스.
+ */
+function toUnitByHouseSn(item: MyHomeItem, indexInGroup: number, pblancId: string): IngestedUnit {
   return {
-    id: `${SOURCE_PREFIX}-${item.pblancId}-u${item.houseSn}-${indexInGroup}`,
+    id: `${SOURCE}-${pblancId}-hs${item.houseSn}`,
     name: item.hsmpNm || `${item.houseTyNm} (${item.suplyTyNm}) ${indexInGroup + 1}호`,
     housingType: toHousingType(item.suplyTyNm),
     rankingMethod: "순위+가점",
@@ -141,16 +177,141 @@ function toUnit(item: MyHomeItem, indexInGroup: number): SupplyUnit {
     address: item.fullAdres || undefined,
     rentNote: buildRentNote(item),
     moveIn: undefined,
-    summary: [`원본 공급유형: ${item.suplyTyNm}`],
-    // 목록 API는 자격요건을 주지 않는다 — 관리자가 조건빌더로 채워야 한다.
+    summary: undefined,
     eligibility: [],
     tiers: [],
     scoreRules: [],
+    active: true,
+    sourceHash: hashUnitFields(item),
+  };
+}
+
+/**
+ * houseSn이 전부 0이라 유닛을 구분 못 하는 케이스(매입임대 다가구주택 등).
+ * 면적·보증금·월세·주소가 같은 항목끼리 하나의 유닛으로 묶고 세대수를 합산한다
+ * (설계서 5-2, 결정 항목 5번). 그룹 키가 곧 유닛 id의 일부가 되어, 재수집 때 배열
+ * 순서가 바뀌어도 같은 물건이면 같은 id를 유지한다.
+ */
+function toUnitsByFieldGroup(items: MyHomeItem[], pblancId: string): IngestedUnit[] {
+  const groups = new Map<string, MyHomeItem[]>();
+  for (const item of items) {
+    const key = simpleHash(
+      [item.fullAdres, item.rentGtn, item.mtRntchrg, item.enty, item.houseTyNm, item.suplyTyNm].join("|"),
+    );
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+
+  return [...groups.entries()].map(([groupKey, group]) => {
+    const first = group[0];
+    const totalHouseholds = group.reduce(
+      (s, it) => s + (Number(it.sumSuplyCo) || Number(it.totHshldCo) || 0),
+      0,
+    );
+    return {
+      id: `${SOURCE}-${pblancId}-grp${groupKey}`,
+      name: first.hsmpNm || `${first.houseTyNm} (${first.suplyTyNm})`,
+      housingType: toHousingType(first.suplyTyNm),
+      rankingMethod: "순위+가점",
+      unitsCount: totalHouseholds,
+      address: first.fullAdres || undefined,
+      rentNote: buildRentNote(first),
+      moveIn: undefined,
+      summary: group.length > 1 ? [`같은 조건의 물건 ${group.length}건을 하나로 묶었어요.`] : undefined,
+      eligibility: [],
+      tiers: [],
+      scoreRules: [],
+      active: true,
+      sourceHash: simpleHash(group.map(hashUnitFields).sort().join(",")),
+    };
+  });
+}
+
+/** 결정적 자동 요약(LLM 없이, 소스 필드로 3~4문장 조립). 설계서 5-3 */
+function buildAutoSummary(a: {
+  agencyName: string;
+  region: string | null;
+  district: string;
+  housingType: HousingType;
+  totalUnits: number;
+  applyStart: string;
+  applyEnd: string;
+  units: IngestedUnit[];
+}): string[] {
+  const lines: string[] = [];
+
+  const regionPart = a.region ? `${a.region} ${a.district}` : a.district || "지역 확인 중";
+  lines.push(`${a.agencyName}이(가) ${regionPart}에 공급하는 ${a.housingType} ${a.totalUnits.toLocaleString("ko-KR")}세대예요.`);
+
+  const start = a.applyStart.slice(5).replace("-", "월 ") + "일";
+  const end = a.applyEnd.slice(5).replace("-", "월 ") + "일";
+  lines.push(`접수는 ${start}부터 ${end}까지예요.`);
+
+  if (a.units.length > 1) {
+    const names = a.units.map((u) => u.name).filter(Boolean).slice(0, 3);
+    if (names.length > 0) {
+      lines.push(`${a.units.length}개 타입이에요: ${names.join(", ")}${a.units.length > 3 ? " 외" : ""}.`);
+    }
+  }
+
+  lines.push("자격 조건은 아직 정리 중이에요. 원문 공고문에서 소득·자산 기준을 확인하세요.");
+
+  return lines;
+}
+
+function toIngestedAnnouncement(pblancId: string, group: MyHomeItem[]): IngestedAnnouncement {
+  const first = group[0];
+  const allHouseSnZero = group.every((it) => it.houseSn === 0);
+  const supplyUnits = allHouseSnZero
+    ? toUnitsByFieldGroup(group, pblancId)
+    : group.map((item, i) => toUnitByHouseSn(item, i, pblancId));
+
+  const totalUnits = supplyUnits.reduce((s, u) => s + u.unitsCount, 0);
+  const region = toRegion(first.brtcNm);
+  const housingType = supplyUnits[0]?.housingType ?? toHousingType(first.suplyTyNm);
+
+  const announcementFields = {
+    id: `${SOURCE}-${pblancId}`,
+    title: first.pblancNm.trim(),
+    agency: { code: toAgencyCode(first.suplyInsttNm), name: first.suplyInsttNm },
+    housingType,
+    region,
+    district: `${first.brtcNm} ${first.signguNm}`.trim(),
+    units: totalUnits,
+    summary: null,
+    announcedAt: toIsoDate(first.rcritPblancDe),
+    applyStart: toIsoDate(first.beginDe),
+    applyEnd: toIsoDate(first.endDe),
+    originalUrl: first.pcUrl || first.url,
+    originalUrlKind: "notice" as const,
+    rankingMethod: "순위+가점" as const,
+    reviewStatus: "pending" as const,
+    status: "published" as const,
+    supplyUnits,
+    source: SOURCE,
+    sourceId: pblancId,
+    requestCount: 0,
+  };
+
+  return {
+    ...announcementFields,
+    autoSummary: buildAutoSummary({
+      agencyName: announcementFields.agency.name,
+      region,
+      district: announcementFields.district,
+      housingType,
+      totalUnits,
+      applyStart: announcementFields.applyStart,
+      applyEnd: announcementFields.applyEnd,
+      units: supplyUnits,
+    }),
+    sourceHash: simpleHash(supplyUnits.map((u) => u.sourceHash).sort().join(",")),
   };
 }
 
 /** 같은 pblancId를 가진 항목들을 하나의 Announcement로 묶는다 */
-function groupToAnnouncements(items: MyHomeItem[]): Announcement[] {
+function groupToAnnouncements(items: MyHomeItem[]): IngestedAnnouncement[] {
   const byPblanc = new Map<string, MyHomeItem[]>();
   for (const item of items) {
     const list = byPblanc.get(item.pblancId) ?? [];
@@ -158,38 +319,13 @@ function groupToAnnouncements(items: MyHomeItem[]): Announcement[] {
     byPblanc.set(item.pblancId, list);
   }
 
-  const out: Announcement[] = [];
-  for (const [pblancId, group] of byPblanc) {
-    const first = group[0];
-    const supplyUnits = group.map((item, i) => toUnit(item, i));
-    out.push({
-      id: `${SOURCE_PREFIX}-${pblancId}`,
-      title: first.pblancNm,
-      agency: { code: toAgencyCode(first.suplyInsttNm), name: first.suplyInsttNm },
-      housingType: supplyUnits[0].housingType,
-      region: toRegion(first.brtcNm),
-      district: `${first.brtcNm} ${first.signguNm}`.trim(),
-      units: supplyUnits.reduce((s, u) => s + u.unitsCount, 0),
-      summary: [
-        `마이홈포털에서 자동으로 가져온 공고예요. 자격요건은 아직 정리되지 않았어요.`,
-        `원문: ${first.pcUrl}`,
-      ],
-      announcedAt: toIsoDate(first.rcritPblancDe),
-      applyStart: toIsoDate(first.beginDe),
-      applyEnd: toIsoDate(first.endDe),
-      originalUrl: first.pcUrl || first.url,
-      originalUrlKind: "notice",
-      rankingMethod: "순위+가점",
-      // 자격요건이 없으니 관리자 검수 전까지는 "확인 필요"로 표시된다.
-      reviewStatus: "pending",
-      status: "draft",
-      supplyUnits,
-    });
-  }
-  return out;
+  return [...byPblanc.entries()].map(([pblancId, group]) => toIngestedAnnouncement(pblancId, group));
 }
 
-async function fetchList(
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 공공데이터포털 API가 간헐적으로 504/타임아웃을 내는 걸 감안해 최대 3회 재시도한다(지수 백오프) */
+async function fetchListOnce(
   operation: "rsdtRcritNtcList" | "ltRsdtRcritNtcList",
   apiKey: string,
   pageNo: number,
@@ -208,13 +344,32 @@ async function fetchList(
   };
 }
 
+async function fetchList(
+  operation: "rsdtRcritNtcList" | "ltRsdtRcritNtcList",
+  apiKey: string,
+  pageNo: number,
+  numOfRows: number,
+  maxRetries = 5,
+): Promise<{ items: MyHomeItem[]; totalCount: number }> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchListOnce(operation, apiKey, pageNo, numOfRows);
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxRetries) await sleep(2000 * attempt);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * 공공임대(rsdtRcritNtcList) + 공공분양(ltRsdtRcritNtcList) 모집공고를 가져와
- * Announcement[]로 변환한다. 페이지당 최대 100건씩, 필요한 페이지 수만큼 순회한다.
+ * IngestedAnnouncement[]로 변환한다. 페이지당 최대 100건씩, 필요한 페이지 수만큼 순회한다.
  */
-export async function fetchMyHomeAnnouncements(apiKey: string): Promise<Announcement[]> {
-  const numOfRows = 100;
-  const results: Announcement[] = [];
+export async function fetchMyHomeAnnouncements(apiKey: string): Promise<IngestedAnnouncement[]> {
+  const numOfRows = 50;
+  const results: IngestedAnnouncement[] = [];
 
   for (const operation of ["rsdtRcritNtcList", "ltRsdtRcritNtcList"] as const) {
     const first = await fetchList(operation, apiKey, 1, numOfRows);
@@ -222,6 +377,7 @@ export async function fetchMyHomeAnnouncements(apiKey: string): Promise<Announce
     const totalPages = Math.ceil(first.totalCount / numOfRows);
 
     for (let page = 2; page <= totalPages; page++) {
+      await sleep(800);
       const next = await fetchList(operation, apiKey, page, numOfRows);
       allItems.push(...next.items);
     }

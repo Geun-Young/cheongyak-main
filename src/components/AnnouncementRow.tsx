@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, CircleDashed, X } from "lucide-react";
 import type { Announcement, AnnouncementMatchSummary } from "@/lib/types";
 import { daysLeft, daysUntilStart, formatDate } from "@/lib/format";
+import { displaySummary } from "@/lib/announcement-display";
 import { countEligibleUnits } from "@/lib/matching";
 import { AgencyMark } from "./AgencyMark";
 import { StatusBadge } from "./StatusBadge";
@@ -125,7 +126,7 @@ export function AnnouncementRow({ a, summary }: { a: Announcement; summary?: Ann
             <span aria-hidden className="h-3 w-px bg-line-strong" />
             <span className="tnum">총 {a.units.toLocaleString("ko-KR")}세대</span>
           </div>
-          <p className="mt-1 hidden text-sm text-ink-2 md:line-clamp-1">{a.summary[0]}</p>
+          <p className="mt-1 hidden text-sm text-ink-2 md:line-clamp-1">{displaySummary(a)[0]}</p>
         </div>
 
         <ChevronRight className="col-start-3 row-start-1 mt-1 shrink-0 self-start text-ink-3 md:hidden" size={18} />

@@ -8,4 +8,5 @@ export const AGENCY_STYLE: Record<AgencyCode, { mark: string; bg: string; fg: st
   IH: { mark: "iH", bg: "#fdeee6", fg: "#b8521d" },
   BMC: { mark: "BMC", bg: "#e8f3f7", fg: "#1f6d8a" },
   PRIVATE: { mark: "민간", bg: "#f1efe9", fg: "#6b6553" },
+  UNKNOWN: { mark: "?", bg: "#f1efe9", fg: "#6b6553" },
 };

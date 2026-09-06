@@ -14,10 +14,12 @@ interface AnnouncementRow {
   agency_code: Announcement["agency"]["code"];
   agency_name: string;
   housing_type: Announcement["housingType"];
+  housing_type_src: string | null;
   region: Announcement["region"];
   district: string;
   units: number;
-  summary: string[];
+  summary: string[] | null;
+  auto_summary: string[] | null;
   announced_at: string;
   apply_start: string;
   apply_end: string;
@@ -26,6 +28,9 @@ interface AnnouncementRow {
   ranking_method: Announcement["rankingMethod"];
   review_status: Announcement["reviewStatus"];
   status: Announcement["status"];
+  source: Announcement["source"] | null;
+  source_id: string | null;
+  request_count: number;
 }
 
 interface SupplyUnitRow {
@@ -44,6 +49,7 @@ interface SupplyUnitRow {
   eligibility: Condition[];
   tiers: Tier[];
   score_rules: ScoreRule[];
+  active: boolean;
 }
 
 function toUnit(row: SupplyUnitRow): SupplyUnit {
@@ -62,6 +68,7 @@ function toUnit(row: SupplyUnitRow): SupplyUnit {
     eligibility: row.eligibility,
     tiers: row.tiers,
     scoreRules: row.score_rules,
+    active: row.active,
   };
 }
 
@@ -75,6 +82,7 @@ function toAnnouncement(row: AnnouncementRow, unitRows: SupplyUnitRow[]): Announ
     district: row.district,
     units: row.units,
     summary: row.summary,
+    autoSummary: row.auto_summary ?? undefined,
     announcedAt: row.announced_at,
     applyStart: row.apply_start,
     applyEnd: row.apply_end,
@@ -83,8 +91,17 @@ function toAnnouncement(row: AnnouncementRow, unitRows: SupplyUnitRow[]): Announ
     rankingMethod: row.ranking_method,
     reviewStatus: row.review_status,
     status: row.status,
-    supplyUnits: unitRows.map(toUnit),
+    // 소스에서 사라진(active=false) 유닛은 사용자 화면에서 제외한다. 관리자 화면은
+    // getAnnouncementsForAdmin/getAnnouncementByIdForAdmin에서 전부(비활성 포함) 보여준다.
+    supplyUnits: unitRows.filter((u) => u.active).map(toUnit),
+    source: row.source ?? undefined,
+    sourceId: row.source_id ?? undefined,
+    requestCount: row.request_count,
   };
+}
+
+function toAnnouncementIncludingInactiveUnits(row: AnnouncementRow, unitRows: SupplyUnitRow[]): Announcement {
+  return { ...toAnnouncement(row, unitRows), supplyUnits: unitRows.map(toUnit) };
 }
 
 function groupUnitsByAnnouncement(unitRows: SupplyUnitRow[]): Map<string, SupplyUnitRow[]> {
@@ -97,12 +114,28 @@ function groupUnitsByAnnouncement(unitRows: SupplyUnitRow[]): Map<string, Supply
   return map;
 }
 
-/** 게시된 공고 전체를 유닛까지 조인해서 가져온다(RLS가 published만 걸러준다). 목록/대시보드/랜딩에서 쓴다 */
+/** 마감 후 이 기간(일)까지는 "마감" 탭에 남긴다. 지나면 목록 쿼리에서 제외한다(행은 보존) */
+const CLOSED_RETENTION_DAYS = 30;
+
+/**
+ * 게시(published)되었거나 최근 마감(closed)된 공고를 유닛까지 조인해서 가져온다
+ * (RLS가 published/closed만 노출하고, 여기서 오래된 closed를 추가로 걸러낸다).
+ * 목록/대시보드/랜딩에서 쓴다.
+ */
 export async function getAnnouncements(): Promise<Announcement[]> {
   const supabase = await createClient();
 
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - CLOSED_RETENTION_DAYS);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
   const [{ data: announcementRows, error: aErr }, { data: unitRows, error: uErr }] = await Promise.all([
-    supabase.from("announcements").select("*").order("apply_end", { ascending: true }),
+    supabase
+      .from("announcements")
+      .select("*")
+      .in("status", ["published", "closed"])
+      .gte("apply_end", cutoffIso)
+      .order("apply_end", { ascending: true }),
     supabase.from("supply_units").select("*"),
   ]);
 
@@ -135,14 +168,19 @@ export async function getAnnouncementById(id: string): Promise<Announcement | un
 }
 
 /**
- * 관리자용: draft·closed를 포함한 전체 공고를 가져온다. service_role로 RLS를 우회한다.
+ * 관리자용: draft·hidden·closed를 포함한 전체 공고를 가져온다. service_role로 RLS를 우회한다.
+ * 큐 정렬은 설계서 7장 기준: "조건 정리되면 알려주세요" 요청 많은 순 → 마감 임박 순.
  * TODO(인증): /admin/*에 로그인 게이트가 붙으면 일반 서버 클라이언트 + admin RLS 정책으로 교체한다.
  */
 export async function getAnnouncementsForAdmin(): Promise<Announcement[]> {
   const supabase = createAdminClient();
 
   const [{ data: announcementRows, error: aErr }, { data: unitRows, error: uErr }] = await Promise.all([
-    supabase.from("announcements").select("*").order("apply_end", { ascending: true }),
+    supabase
+      .from("announcements")
+      .select("*")
+      .order("request_count", { ascending: false })
+      .order("apply_end", { ascending: true }),
     supabase.from("supply_units").select("*"),
   ]);
 
@@ -150,10 +188,24 @@ export async function getAnnouncementsForAdmin(): Promise<Announcement[]> {
   if (uErr) throw uErr;
 
   const unitsByAnnouncement = groupUnitsByAnnouncement(unitRows ?? []);
-  return (announcementRows ?? []).map((a) => toAnnouncement(a, unitsByAnnouncement.get(a.id) ?? []));
+  return (announcementRows ?? []).map((a) => toAnnouncementIncludingInactiveUnits(a, unitsByAnnouncement.get(a.id) ?? []));
 }
 
-/** 관리자 편집 화면용: draft·closed도 조회 가능한 단건 조회 */
+/** 목록 화면의 "마지막 갱신 N분 전" 표시용. 가장 최근 성공(ok/partial) 수집 시각 */
+export async function getLastSuccessfulIngestAt(): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("ingest_runs")
+    .select("finished_at")
+    .in("status", ["ok", "partial"])
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.finished_at ?? null;
+}
+
+/** 관리자 편집 화면용: draft·hidden·closed도 조회 가능하고 비활성 유닛도 보이는 단건 조회 */
 export async function getAnnouncementByIdForAdmin(id: string): Promise<Announcement | undefined> {
   const supabase = createAdminClient();
 
@@ -171,5 +223,5 @@ export async function getAnnouncementByIdForAdmin(id: string): Promise<Announcem
     .eq("announcement_id", id);
   if (uErr) throw uErr;
 
-  return toAnnouncement(announcementRow, unitRows ?? []);
+  return toAnnouncementIncludingInactiveUnits(announcementRow, unitRows ?? []);
 }

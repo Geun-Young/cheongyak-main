@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { getAnnouncementById } from "@/lib/data/announcements";
+import { displaySummary } from "@/lib/announcement-display";
 import { daysLeft, daysUntilStart, formatDate } from "@/lib/format";
 import { HOUSING_TYPE_HINT } from "@/lib/regions";
 import { AgencyMark } from "@/components/AgencyMark";
@@ -97,7 +98,7 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
         <Card>
           <h2 className="text-lg font-bold text-ink">핵심만 정리하면</h2>
           <ul className="mt-3 space-y-2.5">
-            {a.summary.map((s) => (
+            {displaySummary(a).map((s) => (
               <li key={s} className="flex gap-3 text-[15px] leading-relaxed text-ink">
                 <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
                 <span>{s}</span>
