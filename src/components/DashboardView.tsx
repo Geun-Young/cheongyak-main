@@ -1,25 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ANNOUNCEMENTS } from "@/lib/mock/announcements";
+import type { Announcement } from "@/lib/types";
 import { DEMO_PROFILE, deriveFacts, useProfile } from "@/lib/profile";
 import { countByStatus, matchAll } from "@/lib/matching";
 import { AnnouncementList, isUrgent, type ListTab } from "./AnnouncementList";
 import { SummaryTiles, type SummaryKey } from "./SummaryTiles";
 import { ButtonLink, Container } from "./ui";
 
-export function DashboardView() {
+export function DashboardView({ items }: { items: Announcement[] }) {
   const { profile, isLoggedIn } = useProfile();
   const p = profile ?? DEMO_PROFILE;
   const [tab, setTab] = useState<ListTab>("all");
 
   const { results, counts } = useMemo(() => {
     const facts = deriveFacts(p);
-    const results = matchAll(ANNOUNCEMENTS, facts);
+    const results = matchAll(items, facts);
     const base = countByStatus(results.values());
-    const urgent = ANNOUNCEMENTS.filter((a) => isUrgent(a, results.get(a.id))).length;
+    const urgent = items.filter((a) => isUrgent(a, results.get(a.id))).length;
     return { results, counts: { ...base, urgent } as Record<SummaryKey, number> };
-  }, [p]);
+  }, [p, items]);
 
   const needsOnboarding = isLoggedIn && !p.onboardingDone;
 
@@ -51,7 +51,7 @@ export function DashboardView() {
             <span className="ml-1 text-2xl font-bold text-ink">건</span>
           </p>
           <p className="mt-3 max-w-md text-ink-2">
-            {p.name || "회원"}님 조건으로 {ANNOUNCEMENTS.length}건을 확인했어요. 마감이 가까운 순서로 보여드려요.
+            {p.name || "회원"}님 조건으로 {items.length}건을 확인했어요. 마감이 가까운 순서로 보여드려요.
           </p>
         </div>
         <SummaryTiles
@@ -63,7 +63,7 @@ export function DashboardView() {
 
       <div className="mt-6">
         <AnnouncementList
-          items={ANNOUNCEMENTS}
+          items={items}
           results={results}
           tab={tab}
           onTabChange={setTab}

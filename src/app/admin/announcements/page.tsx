@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { ANNOUNCEMENTS } from "@/lib/mock/announcements";
+import { getAnnouncementsForAdmin } from "@/lib/data/announcements";
 import { formatDate } from "@/lib/format";
 import { AgencyMark } from "@/components/AgencyMark";
 import { ButtonLink, Card, Chip, Container, PageTitle } from "@/components/ui";
@@ -14,14 +14,15 @@ const STATUS: Record<string, { label: string; tone: "ok" | "muted" | "warn" }> =
   draft: { label: "임시저장", tone: "warn" },
 };
 
-export default function AdminAnnouncementsPage() {
-  const pending = ANNOUNCEMENTS.filter((a) => a.reviewStatus === "pending").length;
+export default async function AdminAnnouncementsPage() {
+  const announcements = await getAnnouncementsForAdmin();
+  const pending = announcements.filter((a) => a.reviewStatus === "pending").length;
 
   return (
     <Container className="py-6 md:py-10">
       <PageTitle
         title="공고 관리"
-        lead={`총 ${ANNOUNCEMENTS.length}건. 조건 정리가 남은 공고 ${pending}건은 사용자에게 「확인 필요」로 보여요.`}
+        lead={`총 ${announcements.length}건. 조건 정리가 남은 공고 ${pending}건은 사용자에게 「확인 필요」로 보여요.`}
         action={
           <ButtonLink href="/admin/announcements/new">
             <Plus size={18} strokeWidth={2.6} /> 새 공고 등록
@@ -39,12 +40,13 @@ export default function AdminAnnouncementsPage() {
               <th className="px-3 py-2.5">접수 기간</th>
               <th className="px-3 py-2.5">상태</th>
               <th className="px-3 py-2.5">조건</th>
+              <th className="px-3 py-2.5 text-right">유닛 수</th>
               <th className="px-3 py-2.5 text-right">규칙 수</th>
               <th className="px-4 py-2.5" />
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {ANNOUNCEMENTS.map((a) => {
+            {announcements.map((a) => {
               const s = STATUS[a.status];
               return (
                 <tr key={a.id} className="hover:bg-surface-2">
@@ -66,8 +68,9 @@ export default function AdminAnnouncementsPage() {
                       {a.reviewStatus === "ready" ? "정리됨" : "정리 중"}
                     </Chip>
                   </td>
+                  <td className="px-3 py-3 text-right tnum text-ink-2">{a.supplyUnits.length}</td>
                   <td className="px-3 py-3 text-right tnum text-ink-2">
-                    {a.eligibility.length + a.scoreRules.length}
+                    {a.supplyUnits.reduce((s, u) => s + u.eligibility.length + u.scoreRules.length, 0)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/admin/announcements/new?id=${a.id}`} className="text-sm font-semibold text-brand">

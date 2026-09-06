@@ -72,21 +72,46 @@ export interface ScoreRule {
   bands: ScoreBand[];
 }
 
+/**
+ * 공고 하나에 딸린 공급유닛 하나(예: "전용 36㎡ A타입").
+ * 자격요건·순위·가점표·위치는 유닛마다 다를 수 있어 여기에 둔다.
+ */
+export interface SupplyUnit {
+  id: string;
+  /** 사용자에게 보이는 유닛 이름. 예) "전용 36㎡ A타입" */
+  name: string;
+  housingType: HousingType;
+  rankingMethod: RankingMethod;
+  /** 이 유닛의 세대수 */
+  unitsCount: number;
+  /** 도로명주소. 미확정이면 생략(지도 자리에 "위치 확인 중" 표시) */
+  address?: string;
+  lat?: number;
+  lng?: number;
+  rentNote?: string;
+  moveIn?: string;
+  /** 이 유닛 고유의 보충 설명. 유닛이 하나뿐이면 대개 비워둔다 */
+  summary?: string[];
+  eligibility: Condition[];
+  tiers: Tier[];
+  scoreRules: ScoreRule[];
+}
+
 export interface Announcement {
   id: string;
   title: string;
   agency: { code: AgencyCode; name: string };
+  /** 대표 주택유형(목록 필터·칩 표시용). 유닛마다 다르면 상세 페이지에서 유닛 값이 우선한다 */
   housingType: HousingType;
   region: Region | "전국";
   district: string;
+  /** 세대수 총합(= supplyUnits의 unitsCount 합). 목록 카드 표시용으로 필드명을 유지한다 */
   units: number;
-  /** 관리자가 사람 말로 정리한 요약 3~5줄 */
+  /** 관리자가 사람 말로 정리한 공고 전체 요약 3~5줄 */
   summary: string[];
   announcedAt: string;
   applyStart: string;
   applyEnd: string;
-  moveIn?: string;
-  rentNote?: string;
   originalUrl: string;
   /**
    * originalUrl이 무엇을 가리키는지.
@@ -94,13 +119,13 @@ export interface Announcement {
    * 생략하면 notice.
    */
   originalUrlKind?: "notice" | "list" | "home";
+  /** 대표 순위 산정 방식(목록 칩 표시용) */
   rankingMethod: RankingMethod;
   /** pending이면 조건이 아직 정리되지 않아 "확인 필요" */
   reviewStatus: "ready" | "pending";
   status: "draft" | "published" | "closed";
-  eligibility: Condition[];
-  tiers: Tier[];
-  scoreRules: ScoreRule[];
+  /** 이 공고에 속한 공급유닛들. 최소 1개 이상이어야 한다 */
+  supplyUnits: SupplyUnit[];
 }
 
 export type EligibilityStatus = "eligible" | "ineligible" | "needs_review" | "closed";
@@ -114,12 +139,22 @@ export interface ScoreLine {
 
 export interface MatchResult {
   announcementId: string;
+  unitId: string;
   status: EligibilityStatus;
   unmet: Condition[];
   tier?: Tier;
   points: number;
   maxPoints: number;
   breakdown: ScoreLine[];
+}
+
+/** 공고 하나에 속한 유닛들을 전부 판정한 결과 묶음 */
+export interface AnnouncementMatchSummary {
+  announcementId: string;
+  /** supplyUnits와 같은 순서·길이 */
+  unitResults: MatchResult[];
+  /** 사용자에게 가장 먼저 보여줄 대표 결과(eligible 우선 → 조건에 더 가까운 유닛 순) */
+  best: MatchResult;
 }
 
 export type IncomeBracket = 50 | 70 | 100 | 120 | 150 | 999;

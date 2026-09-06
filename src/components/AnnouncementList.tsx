@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Home, MapPin } from "lucide-react";
-import type { Announcement, EligibilityStatus, MatchResult } from "@/lib/types";
+import type { Announcement, AnnouncementMatchSummary, EligibilityStatus } from "@/lib/types";
 import { HOUSING_TYPES, REGIONS } from "@/lib/regions";
 import { daysLeft } from "@/lib/format";
 import { AnnouncementRow } from "./AnnouncementRow";
@@ -19,9 +19,9 @@ const TABS: { key: ListTab; label: string }[] = [
   { key: "closed", label: "마감" },
 ];
 
-export function isUrgent(a: Announcement, r?: MatchResult): boolean {
+export function isUrgent(a: Announcement, summary?: AnnouncementMatchSummary): boolean {
   const left = daysLeft(a.applyEnd);
-  return r?.status === "eligible" && left >= 0 && left <= 3;
+  return summary?.best.status === "eligible" && left >= 0 && left <= 3;
 }
 
 export function AnnouncementList({
@@ -34,7 +34,7 @@ export function AnnouncementList({
   emptyAction,
 }: {
   items: Announcement[];
-  results?: Map<string, MatchResult>;
+  results?: Map<string, AnnouncementMatchSummary>;
   tab: ListTab;
   onTabChange: (t: ListTab) => void;
   initialRegion?: string;
@@ -48,19 +48,19 @@ export function AnnouncementList({
   const counts = useMemo(() => {
     const c: Record<ListTab, number> = { all: 0, eligible: 0, ineligible: 0, needs_review: 0, closed: 0, urgent: 0 };
     for (const a of items) {
-      const r = results?.get(a.id);
+      const summary = results?.get(a.id);
       c.all += 1;
-      if (r) c[r.status] += 1;
-      if (isUrgent(a, r)) c.urgent += 1;
+      if (summary) c[summary.best.status] += 1;
+      if (isUrgent(a, summary)) c.urgent += 1;
     }
     return c;
   }, [items, results]);
 
   const visible = useMemo(() => {
     const list = items.filter((a) => {
-      const r = results?.get(a.id);
-      if (tab === "urgent" && !isUrgent(a, r)) return false;
-      if (tab !== "all" && tab !== "urgent" && (r?.status ?? "needs_review") !== tab) return false;
+      const summary = results?.get(a.id);
+      if (tab === "urgent" && !isUrgent(a, summary)) return false;
+      if (tab !== "all" && tab !== "urgent" && (summary?.best.status ?? "needs_review") !== tab) return false;
       if (region && a.region !== region && a.region !== "전국") return false;
       if (type && a.housingType !== type) return false;
       return true;
@@ -143,7 +143,7 @@ export function AnnouncementList({
         <ul className="divide-y divide-line">
           {visible.map((a) => (
             <li key={a.id}>
-              <AnnouncementRow a={a} result={results?.get(a.id)} />
+              <AnnouncementRow a={a} summary={results?.get(a.id)} />
             </li>
           ))}
         </ul>

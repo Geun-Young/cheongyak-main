@@ -82,9 +82,18 @@ export function ConditionBuilder({
       rankingMethod: "순위+가점",
       reviewStatus: "ready",
       status: "published",
-      eligibility: toConditions(rows),
-      tiers: [],
-      scoreRules: [],
+      supplyUnits: [
+        {
+          id: "draft-unit",
+          name: "미리보기",
+          housingType: "국민임대",
+          rankingMethod: "순위+가점",
+          unitsCount: 0,
+          eligibility: toConditions(rows),
+          tiers: [],
+          scoreRules: [],
+        },
+      ],
     };
     return matchAnnouncement(draft, deriveFacts(DEMO_PROFILE));
   }, [rows]);
@@ -200,11 +209,11 @@ export function ConditionBuilder({
       {showPreview && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-brand-tint px-4 py-3 text-sm">
           <span className="font-semibold text-ink-2">체험 계정 「김청약」 판정</span>
-          <StatusBadge status={preview.status} size="sm" />
-          {preview.status === "ineligible" && (
-            <span className="text-ink-2">미달: {preview.unmet.map((c) => c.label).join(", ")}</span>
+          <StatusBadge status={preview.best.status} size="sm" />
+          {preview.best.status === "ineligible" && (
+            <span className="text-ink-2">미달: {preview.best.unmet.map((c) => c.label).join(", ")}</span>
           )}
-          {preview.status === "needs_review" && <span className="text-ink-3">자격요건이 없어서 확인 필요로 표시돼요</span>}
+          {preview.best.status === "needs_review" && <span className="text-ink-3">자격요건이 없어서 확인 필요로 표시돼요</span>}
         </div>
       )}
     </div>

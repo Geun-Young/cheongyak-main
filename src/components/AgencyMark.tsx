@@ -1,5 +1,5 @@
 import type { AgencyCode } from "@/lib/types";
-import { AGENCY_STYLE } from "@/lib/mock/announcements";
+import { AGENCY_STYLE } from "@/lib/agency";
 import { cx } from "./ui";
 
 /** 기관 로고 대신 쓰는 모노그램 타일. 상표 사용 이슈를 피하고 어떤 크기에서도 읽힌다. */

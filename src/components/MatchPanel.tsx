@@ -1,15 +1,15 @@
 "use client";
 
 import { Check, X } from "lucide-react";
-import type { Announcement } from "@/lib/types";
+import type { Announcement, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
-import { checkCondition, matchAnnouncement } from "@/lib/matching";
+import { checkCondition, matchUnit } from "@/lib/matching";
 import { describeFact } from "@/lib/fields";
 import { StatusBadge } from "./StatusBadge";
 import { ButtonLink, Card, cx } from "./ui";
 
-export function MatchPanel({ a }: { a: Announcement }) {
+export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
   const { profile } = useProfile();
   const guest = useGuestProfile();
   const p = profile ?? guest;
@@ -30,7 +30,7 @@ export function MatchPanel({ a }: { a: Announcement }) {
   }
 
   const facts = deriveFacts(p);
-  const r = matchAnnouncement(a, facts);
+  const r = matchUnit(a, unit, facts);
   const isGuest = !profile;
 
   return (
@@ -68,7 +68,7 @@ export function MatchPanel({ a }: { a: Announcement }) {
             </div>
             <p className="mt-3 text-sm text-ink-2">
               {r.tier ? `순위 기준: ${r.tier.label}. ` : ""}
-              {a.rankingMethod === "추첨제" ? "같은 순위 안에서는 추첨으로 뽑아요." : "같은 순위 안에서는 가점이 높은 순서예요."}
+              {unit.rankingMethod === "추첨제" ? "같은 순위 안에서는 추첨으로 뽑아요." : "같은 순위 안에서는 가점이 높은 순서예요."}
             </p>
           </div>
         )}
@@ -106,11 +106,11 @@ export function MatchPanel({ a }: { a: Announcement }) {
         )}
       </Card>
 
-      {a.eligibility.length > 0 && r.status !== "closed" && (
+      {unit.eligibility.length > 0 && r.status !== "closed" && (
         <Card>
           <h3 className="text-base font-bold text-ink">자격 요건 체크</h3>
           <ul className="mt-3 divide-y divide-line">
-            {a.eligibility.map((c) => {
+            {unit.eligibility.map((c) => {
               const ok = checkCondition(c, facts);
               return (
                 <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
@@ -128,11 +128,11 @@ export function MatchPanel({ a }: { a: Announcement }) {
         </Card>
       )}
 
-      {a.tiers.length > 0 && r.status === "eligible" && (
+      {unit.tiers.length > 0 && r.status === "eligible" && (
         <Card>
           <h3 className="text-base font-bold text-ink">순위는 이렇게 갈려요</h3>
           <ol className="mt-3 space-y-2">
-            {a.tiers.map((t) => {
+            {unit.tiers.map((t) => {
               const mine = r.tier?.rank === t.rank && r.tier?.label === t.label;
               return (
                 <li key={`${t.rank}-${t.label}`} className={cx("flex items-center gap-3 rounded-md border px-3 py-2.5", mine ? "border-ok bg-ok-soft" : "border-line")}>

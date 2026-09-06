@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ChevronRight, CircleDashed, X } from "lucide-react";
-import type { Announcement, MatchResult } from "@/lib/types";
+import type { Announcement, AnnouncementMatchSummary } from "@/lib/types";
 import { daysLeft, daysUntilStart, formatDate } from "@/lib/format";
+import { countEligibleUnits } from "@/lib/matching";
 import { AgencyMark } from "./AgencyMark";
 import { StatusBadge } from "./StatusBadge";
 import { Chip, cx } from "./ui";
@@ -45,7 +46,7 @@ function Deadline({ a }: { a: Announcement }) {
   );
 }
 
-function Result({ result }: { result?: MatchResult }) {
+function Result({ result }: { result?: AnnouncementMatchSummary["best"] }) {
   if (!result) {
     return <p className="text-sm text-ink-3">조건을 입력하면 판정해 드려요</p>;
   }
@@ -95,7 +96,10 @@ function Result({ result }: { result?: MatchResult }) {
  * 목록의 한 행. 데스크탑은 6열 그리드(기관·제목·상태·판정·마감·화살표),
  * 모바일은 3줄(제목 / 상태+마감 / 판정)로 다시 배치한다.
  */
-export function AnnouncementRow({ a, result }: { a: Announcement; result?: MatchResult }) {
+export function AnnouncementRow({ a, summary }: { a: Announcement; summary?: AnnouncementMatchSummary }) {
+  const result = summary?.best;
+  const { eligible, total } = summary ? countEligibleUnits(summary) : { eligible: 0, total: 0 };
+  const showUnitBadge = total > 1;
   return (
     <Link
       href={`/announcements/${a.id}`}
@@ -108,6 +112,11 @@ export function AnnouncementRow({ a, result }: { a: Announcement; result?: Match
           <div className="flex flex-wrap items-center gap-2">
             <Chip tone="brand" size="sm">{a.housingType}</Chip>
             <h3 className="text-[16px] font-bold leading-snug text-ink md:text-[17px]">{a.title}</h3>
+            {showUnitBadge && (
+              <Chip size="sm" tone={eligible > 0 ? "ok" : "muted"}>
+                {total}개 타입 중 {eligible}개 신청가능
+              </Chip>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-3">
             <span>{a.agency.name.split(" ")[0]}</span>

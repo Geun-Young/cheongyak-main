@@ -1,11 +1,10 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileText, Save, Send } from "lucide-react";
 import type { Announcement, HousingType, RankingMethod } from "@/lib/types";
 import { HOUSING_TYPES, REGIONS } from "@/lib/regions";
-import { getAnnouncement } from "@/lib/mock/announcements";
 import { ConditionBuilder, type BuilderRow } from "@/components/ConditionBuilder";
 import { Button, Card, Chip, Container, Field, Input, PageTitle, Select, Textarea } from "@/components/ui";
 
@@ -42,17 +41,18 @@ function initialForm(a?: Announcement): FormState {
     units: a ? String(a.units) : "",
     applyStart: a?.applyStart ?? "",
     applyEnd: a?.applyEnd ?? "",
-    moveIn: a?.moveIn ?? "",
-    rentNote: a?.rentNote ?? "",
+    moveIn: a?.supplyUnits[0]?.moveIn ?? "",
+    rentNote: a?.supplyUnits[0]?.rentNote ?? "",
     originalUrl: a?.originalUrl ?? "",
     summary: a?.summary.join("\n") ?? "",
     ranking: a?.rankingMethod ?? "순위+가점",
   };
 }
 
+/** 편집 모드에서는 첫 번째 공급유닛의 조건을 불러온다. 여러 유닛 편집 UI는 후속 작업으로 남겨둔다 */
 function initialRows(a?: Announcement): BuilderRow[] {
-  if (!a) return [];
-  return a.eligibility.map((c) => ({
+  const eligibility = a?.supplyUnits[0]?.eligibility ?? [];
+  return eligibility.map((c) => ({
     id: c.id,
     field: c.field,
     operator: c.operator,
@@ -231,9 +231,31 @@ function AnnouncementForm({ editing }: { editing?: Announcement }) {
 function FormLoader() {
   const params = useSearchParams();
   const editId = params.get("id");
-  const editing = editId ? getAnnouncement(editId) : undefined;
+  const [editing, setEditing] = useState<Announcement | undefined>();
+  const [loadingId, setLoadingId] = useState<string | null>(editId);
+
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    fetch(`/api/admin/announcements/${editId}`)
+      .then((res) => (res.ok ? res.json() : undefined))
+      .then((data) => {
+        if (!cancelled) setEditing(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId]);
+
+  if (editId && loadingId === editId) {
+    return <Container className="py-10 text-ink-3">불러오는 중이에요.</Container>;
+  }
+
   // id가 바뀌면 폼을 새로 마운트해서 초기값을 다시 계산한다
-  return <AnnouncementForm key={editId ?? "new"} editing={editing} />;
+  return <AnnouncementForm key={editId ?? "new"} editing={editId ? editing : undefined} />;
 }
 
 export default function NewAnnouncementPage() {

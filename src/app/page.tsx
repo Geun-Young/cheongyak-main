@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Bell, BellRing, ListChecks, SlidersHorizontal } from "lucide-react";
 import hero from "../../public/hero-living.webp";
-import { ANNOUNCEMENTS, getAnnouncement } from "@/lib/mock/announcements";
+import { getAnnouncements } from "@/lib/data/announcements";
 import { DEMO_PROFILE, deriveFacts } from "@/lib/profile-data";
 import { matchAnnouncement } from "@/lib/matching";
 import { daysLeft } from "@/lib/format";
@@ -36,15 +36,17 @@ const FAQ = [
   },
 ];
 
-export default function LandingPage() {
-  const open = ANNOUNCEMENTS.filter((a) => a.status === "published" && daysLeft(a.applyEnd) >= 0);
+export default async function LandingPage() {
+  const announcements = await getAnnouncements();
+  const open = announcements.filter((a) => a.status === "published" && daysLeft(a.applyEnd) >= 0);
   const upcoming = [...open].sort((a, b) => daysLeft(a.applyEnd) - daysLeft(b.applyEnd)).slice(0, 3);
 
   const facts = deriveFacts(DEMO_PROFILE);
-  const samples = ["lh-gangdong-national-2026-2", "sh-purchase-2026-3", "lh-hanam-gamil-happy"]
-    .map((id) => getAnnouncement(id))
+  const sampleIds = ["lh-gangdong-national-2026-2", "sh-purchase-2026-3", "lh-hanam-gamil-happy"];
+  const samples = sampleIds
+    .map((id) => announcements.find((a) => a.id === id))
     .filter((a): a is NonNullable<typeof a> => Boolean(a))
-    .map((a) => ({ a, r: matchAnnouncement(a, facts) }));
+    .map((a) => ({ a, summary: matchAnnouncement(a, facts) }));
 
   return (
     <>
@@ -137,9 +139,9 @@ export default function LandingPage() {
             예시: 서울 사는 32세 1인 가구, 소득 100% 이하, 무주택, 청약통장 78회 납입
           </p>
           <ul className="divide-y divide-line">
-            {samples.map(({ a, r }) => (
+            {samples.map(({ a, summary }) => (
               <li key={a.id}>
-                <AnnouncementRow a={a} result={r} />
+                <AnnouncementRow a={a} summary={summary} />
               </li>
             ))}
           </ul>

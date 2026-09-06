@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { getAnnouncement } from "@/lib/mock/announcements";
+import { getAnnouncementById } from "@/lib/data/announcements";
 import { daysLeft, daysUntilStart, formatDate } from "@/lib/format";
 import { HOUSING_TYPE_HINT } from "@/lib/regions";
 import { AgencyMark } from "@/components/AgencyMark";
-import { MatchPanel } from "@/components/MatchPanel";
+import { SupplyUnitPicker } from "@/components/SupplyUnitPicker";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { ButtonLink, Card, Chip, Container, cx } from "@/components/ui";
 
 export async function generateMetadata(props: PageProps<"/announcements/[id]">): Promise<Metadata> {
   const { id } = await props.params;
-  const a = getAnnouncement(id);
+  const a = await getAnnouncementById(id);
   return { title: a ? a.title : "공고를 찾을 수 없어요" };
 }
 
@@ -45,7 +45,7 @@ function DeadlineBlock({ end, start }: { end: string; start: string }) {
 
 export default async function AnnouncementDetailPage(props: PageProps<"/announcements/[id]">) {
   const { id } = await props.params;
-  const a = getAnnouncement(id);
+  const a = await getAnnouncementById(id);
   if (!a) notFound();
   const urlKind = a.originalUrlKind ?? "notice";
 
@@ -77,7 +77,7 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
         </Card>
 
         <aside className="space-y-3 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
-          <MatchPanel a={a} />
+          <SupplyUnitPicker a={a} />
           <div className="flex flex-wrap gap-2">
             <FavoriteButton id={a.id} />
             <ButtonLink href={a.originalUrl} external variant="secondary">
@@ -110,7 +110,7 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
         </Card>
 
         <Card>
-          <h2 className="text-lg font-bold text-ink">일정과 조건</h2>
+          <h2 className="text-lg font-bold text-ink">일정</h2>
           <dl className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
             <div className="flex justify-between gap-4 border-b border-line pb-2.5">
               <dt className="text-ink-3">공고일</dt>
@@ -120,20 +120,13 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
               <dt className="text-ink-3">접수 기간</dt>
               <dd className="font-semibold tnum">{formatDate(a.applyStart)} ~ {formatDate(a.applyEnd)}</dd>
             </div>
-            <div className="flex justify-between gap-4 border-b border-line pb-2.5">
-              <dt className="text-ink-3">입주 예정</dt>
-              <dd className="font-semibold text-right">{a.moveIn ?? "공고문 참고"}</dd>
-            </div>
-            <div className="flex justify-between gap-4 border-b border-line pb-2.5">
+            <div className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
               <dt className="text-ink-3">순위 산정</dt>
               <dd className="font-semibold">{a.rankingMethod}</dd>
             </div>
-            <div className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
-              <dt className="shrink-0 text-ink-3">임대 조건</dt>
-              <dd className="font-semibold text-right">{a.rentNote ?? "공고문 참고"}</dd>
-            </div>
           </dl>
           <p className="mt-4 text-[13px] text-ink-3">
+            입주 예정·임대 조건·위치는 유닛마다 달라서 오른쪽 판정 카드에 유닛별로 표시돼요.
             정리한 내용과 공고문이 다르면 공고문이 맞아요. 원문 링크에서 꼭 다시 확인하세요.
           </p>
         </Card>

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ANNOUNCEMENTS } from "@/lib/mock/announcements";
+import type { Announcement } from "@/lib/types";
 import { deriveFacts, profileFromQuery, useProfile } from "@/lib/profile";
 import { saveGuestProfile, useGuestProfile } from "@/lib/guest";
 import { matchAll } from "@/lib/matching";
@@ -11,7 +11,7 @@ import { AnnouncementList, type ListTab } from "./AnnouncementList";
 import { QuickFilter } from "./QuickFilter";
 import { ButtonLink, Card, Container, PageTitle } from "./ui";
 
-export function AnnouncementsView() {
+export function AnnouncementsView({ items }: { items: Announcement[] }) {
   const params = useSearchParams();
   const { profile } = useProfile();
   const storedGuest = useGuestProfile();
@@ -25,7 +25,7 @@ export function AnnouncementsView() {
   }, [fromQuery]);
 
   const p = profile ?? fromQuery ?? storedGuest;
-  const results = useMemo(() => (p ? matchAll(ANNOUNCEMENTS, deriveFacts(p)) : undefined), [p]);
+  const results = useMemo(() => (p ? matchAll(items, deriveFacts(p)) : undefined), [p, items]);
   const isGuest = !profile && Boolean(p);
 
   const region = params.get("region") ?? "";
@@ -67,7 +67,7 @@ export function AnnouncementsView() {
 
       <div className="mt-5">
         <AnnouncementList
-          items={ANNOUNCEMENTS}
+          items={items}
           results={results}
           tab={tab}
           onTabChange={setTab}
