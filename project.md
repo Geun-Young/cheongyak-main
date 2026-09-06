@@ -10,9 +10,10 @@
 
 - **UI**: 목업 단계를 지나 Supabase 기반 실서비스 배관이 연결됨.
 - **인증**: 아직 없음. `/admin/*`는 로그인 게이트 없이 열려 있음(TODO로 표시해둠).
-- **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있고, **전부 `published + pending` 상태로 일반 사용자 화면에 바로 노출됨** (자격요건은 비어 있어 "확인 필요"로 표시). 하루 3회 GitHub Actions 크론으로 자동 재수집되도록 구성됨(Secrets 등록은 아직 사용자가 해야 함).
+- **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있고, **전부 `published + pending` 상태로 일반 사용자 화면에 바로 노출됨** (자격요건은 비어 있어 "확인 필요"로 표시).
+- **자동수집 스케줄은 지금 비활성 상태다** — 마이홈포털 API가 GitHub Actions의 해외 러너 IP를 403으로 차단해서, 하루 3회 크론이 실제로는 못 돈다. 당분간 `npm run ingest:myhome`을 필요할 때 로컬(한국 IP)에서 직접 실행한다. 자세한 배경은 8-1절.
 - **지도**: 자리(placeholder)만 있고 실제 지도는 아직 안 붙음.
-- **다음으로 할 일 후보**: GitHub Actions Secrets 등록, 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증.
+- **다음으로 할 일 후보**: 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증, (여유 생기면) Vercel Pro로 국내 리전 자동화.
 
 ---
 
@@ -135,9 +136,23 @@ Next.js 16 + React 19 + Tailwind v4로 만든 **UI 껍데기(목업)**. 공고 1
 
 **실행 검증**: 기존 mock 129건(구 로직, status=draft)을 삭제하고 새 로직으로 재수집 → **129건 전부 신규 insert, status=published**로 들어감. anon key로 조회 시 이전엔 0건이었던 게 이제 **129건 전체가 보임**을 직접 확인 — 이게 이번 재설계의 핵심 목표("관리자 개입 없이 목록 갱신")가 실제로 달성됐다는 증거. 재수집(idempotency, unchanged 카운트) 검증은 이 세션 중 공공데이터포털 API가 여러 차례 불안정(504/커넥션 타임아웃)해서 완료하지 못함 — 다음 세션에서 재검증 필요.
 
+### 8-1. GitHub Actions 크론이 마이홈포털 API에 403 — 자동화 중단, 로컬 실행으로 전환
+
+GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 등록 후 `workflow_dispatch`로 실제 실행해서 검증하는 과정에서 발견.
+
+**1차 실패**: `@supabase/supabase-js`가 의존하는 `@supabase/realtime-js`가 Node 22+의 네이티브 WebSocket을 요구하는데, 워크플로가 Node 20을 쓰고 있어서 클라이언트 생성 자체에서 크래시(`Error: Node.js detected but native WebSocket not found`). → `node-version: 22`로 수정, `package.json`에 `engines.node: ">=22.0.0"` 명시. 커밋 `0ea35df`.
+
+**2차 실패**: Node 22로 고친 뒤 재실행하니 이번엔 `마이홈포털 API 응답 오류: 403`. 같은 코드, 같은 키로 로컬(한국 IP)에서는 (그 시점의 API 불안정과 별개로) 정상 동작했던 반면 GitHub Actions(해외 러너 IP)에서는 API 서버까지 도달은 했지만 거부당함(403은 "응답"이 온 것 — 연결 실패와 다름). 국토교통부 계열 공공데이터포털 API가 해외 IP를 차단하는 건 흔히 보고되는 제약이라, 이 패턴과 일치한다고 판단.
+
+**국내 IP로 자동화하는 대안 검토**:
+- GitHub Actions: 러너 리전 선택 불가 → 불가능.
+- Vercel: 서버리스 함수 리전을 `icn1`(서울)로 지정하면 가능하지만, **Hobby(무료) 플랜은 리전이 미국 고정이라 Pro(유료) 플랜이 있어야** 함. Cron도 Hobby는 하루 1회 제한(설계서 6-2에 이미 언급됨).
+
+**결정**: 지금은 유료 인프라 없이 간다 — GitHub Actions의 `schedule` 크론을 주석 처리(비활성화)하고 `workflow_dispatch`(수동 실행)만 남김. 대신 `npm run ingest:myhome` 스크립트를 추가해 로컬(또는 향후 한국 리전 서버)에서 필요할 때 직접 수집하는 걸 당분간의 기본 운영 방식으로 함. `tsx`를 정식 devDependency로 승격(그동안 `npx tsx`로 온디맨드 설치해서 썼음).
+
 ## 아직 안 한 것 / 다음 단계 후보
 
-- **GitHub Actions Secrets 등록**: `.github/workflows/ingest.yml`은 만들어졌지만 저장소 Settings → Secrets에 `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`가 아직 등록 안 됨 — 등록 전까지 자동 크론이 실제로 돌지 않는다.
+- **자동수집 재개 방법 찾기**: GitHub Actions Secrets는 등록 완료했지만 마이홈포털 API가 해외 러너 IP를 403으로 차단해서 `schedule` 크론을 비활성화한 상태(8-1절). 당분간 `npm run ingest:myhome`을 필요할 때 직접 실행. 재개 후보: Vercel Pro(서울 리전) 또는 집/사무실 PC·홈서버에서 도는 로컬 크론(cron/작업 스케줄러).
 - **재수집 idempotency 실증 검증**: `applyIngestedAnnouncements()`의 "해시 같으면 unchanged, 다르면 recheck 전환" 로직은 코드 리뷰 수준으로는 맞지만, 실제로 같은 데이터를 두 번 수집했을 때 unchanged로 잡히는지는 API 불안정으로 이번 세션에서 확인 못 함.
 - **관리자 큐 UI 완성**: 설계서 7장의 필터 탭(pending/recheck/매핑실패/중복의심/완료), 행 단위 액션(숨기기·유형 고치기·조건 템플릿 적용), 다중 유닛 조건 복사("첫 유닛 조건을 나머지에 복사")는 아직 — 지금은 집계 숫자와 컬럼 표시만 있음. 마이홈 데이터 58건이 다중 유닛이라 이게 없으면 검수 속도가 느림.
 - **판정 조건 실제 입력**: 129건 전부 `reviewStatus: pending`(자격요건 없음) — 관리자가 조건빌더로 채워야 실제 판정(순위·가점)이 동작. 지금 조건빌더는 유닛 1개만 편집 가능.
@@ -148,7 +163,7 @@ Next.js 16 + React 19 + Tailwind v4로 만든 **UI 껍데기(목업)**. 공고 1
 - **인증(이메일/카카오)**: `/admin/*`에 로그인 게이트가 없어 지금은 `service_role`로 우회 중 — 보안상 임시 조치, **배포 금지 조건**(설계서 10장). 카카오 디벨로퍼스 앱 등록도 아직 안 함.
 - **DB 비밀번호 재발급 확인**: 마이그레이션 과정에서 대화에 여러 번 노출된 Supabase DB 비밀번호를 아직 재발급 안 함(사용자가 "재발급 안 하고 기존 걸로 진행" 선택).
 - **실데이터 소득기준표**: 여전히 2025년 자리표시 값(`INCOME_100_BY_HOUSEHOLD`).
-- **Vercel 배포 후**: `/api/cron/ingest` 라우트 + Vercel Cron으로 전환(설계서 6-2). 지금은 GitHub Actions만.
+- **Vercel 배포 후**: `/api/cron/ingest` 라우트 + Vercel Cron(Pro 플랜, 서울 리전)으로 전환(설계서 6-2) — GitHub Actions는 IP 문제로 이 API엔 못 쓴다는 게 확인됨(8-1절).
 
 ---
 
@@ -160,6 +175,8 @@ Next.js 16 + React 19 + Tailwind v4로 만든 **UI 껍데기(목업)**. 공고 1
 - **RLS는 `status in ('published','closed')`만 공개**한다(0002부터, 이전엔 published만) — 새 데이터를 넣었는데 화면에 안 보이면 버그가 아니라 `status`/`review_status`부터 확인. `getAnnouncements()`는 여기에 더해 마감 30일 지난 건을 애플리케이션 레벨에서 추가로 거른다.
 - **관리자 페이지는 지금 `service_role`로 우회 중**이라 인증 없이도 `/admin/*`이 열림 — 배포 전 반드시 인증 게이트 필요.
 - **마이홈포털 공공데이터 API는 세션 중 여러 번 504/커넥션 타임아웃을 냈다** — 우리 코드 문제가 아니라 그쪽 서버의 간헐적 불안정. `lib/ingest/myhome.ts`가 재시도(5회, 지수 백오프)로 대응하지만, 그래도 실패하면 며칠 안에 재시도하면 된다.
+- **마이홈포털 API는 해외 IP를 차단한다** — GitHub Actions에서 돌리면 403. 이 API를 서버에서 자동 호출하려면 반드시 한국 리전(로컬 PC, 국내 서버, 또는 Vercel Pro의 `icn1` 리전)에서 실행해야 한다.
+- **`@supabase/supabase-js`는 Node 22+가 필요하다** — 내부 `realtime-js`가 네이티브 WebSocket을 요구해서 Node 20 이하에서는 클라이언트 생성 자체가 크래시한다. CI 설정 시 `node-version`을 꼭 22 이상으로.
 - **자동수집이 관리자 작업을 덮어쓰면 안 된다는 원칙**: `scripts/lib/ingest-upsert.ts`가 신규(insert)와 기존(update) 행을 분리하고, update는 "소스 소유 칸"만 명시적으로 나열한 컬럼 목록으로 한다 — status/review_status/summary/eligibility 등은 그 목록에 아예 없어서 코드 구조상 못 건드린다. 새 소스 필드를 추가할 때 이 upsert 헬퍼도 같이 갱신해야 한다.
 - **마이홈포털 API의 매입임대(다가구주택) 데이터는 개별 유닛 식별자가 없다** — 면적·보증금·월세·주소 해시로 그룹핑해서 유닛을 만든다(`toUnitsByFieldGroup`).
 - **KST 기준 날짜 비교**: 자동 마감(`autoCloseExpiredAnnouncements`)은 서버가 어느 시간대에서 돌든 KST 자정 기준으로 비교하도록 `Date.now() + 9시간` 오프셋을 쓴다. 서버 UTC 기준으로 그냥 비교하면 9시간 일찍 마감된다.

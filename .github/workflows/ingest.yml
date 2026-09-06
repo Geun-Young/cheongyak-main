@@ -1,10 +1,17 @@
 name: ingest-announcements
 
+# schedule 크론은 비활성화 상태다. 마이홈포털 API(apis.data.go.kr)가 GitHub Actions의
+# 해외 러너 IP를 403으로 차단하는 것으로 실제 실행에서 확인됐다(2026-09-06, run 34019835329) —
+# 같은 코드가 로컬(한국 IP)에서는 되고 CI에서만 403이 났다. 국내 IP로 자동화하려면
+# Vercel Pro(리전을 icn1으로 지정 가능) 등 유료 인프라가 필요해서, 당분간은 로컬/한국 서버에서
+# 필요할 때 `npx tsx scripts/ingest-myhome.ts`를 직접 실행한다(project.md 참고).
+# workflow_dispatch(수동 실행)는 남겨둔다 — 나중에 IP 제한이 풀렸는지 재확인하거나,
+# 국내 리전 러너를 쓰게 되면 바로 schedule을 되살릴 수 있게.
 on:
-  schedule:
-    - cron: "10 23 * * *" # KST 08:10
-    - cron: "10 4 * * *" # KST 13:10
-    - cron: "10 9 * * *" # KST 18:10
+  # schedule:
+  #   - cron: "10 23 * * *" # KST 08:10
+  #   - cron: "10 4 * * *" # KST 13:10
+  #   - cron: "10 9 * * *" # KST 18:10
   workflow_dispatch: # 수동 실행 버튼
 
 concurrency: ingest # 겹침 방지(설계서 6-1)
