@@ -17,7 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # @supabase/realtime-js가 Node 22+의 네이티브 WebSocket을 요구한다(20에서는 실행 자체가 실패함).
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx tsx scripts/ingest-myhome.ts
