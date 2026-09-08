@@ -190,12 +190,29 @@ export interface AnnouncementMatchSummary {
 export type IncomeBracket = 50 | 70 | 100 | 120 | 150 | 999;
 export type IncomeConfidence = "certain" | "estimate" | "unknown";
 
+/**
+ * 통근/통학 추천 점수 계산에 쓰는 기준 위치.
+ * 정확도를 사용자가 고른다 — "station"은 가까운 역 이름만(프라이버시 부담 적고 도보시간은
+ * 역 기준 도보 5~10분으로 근사), "address"는 전체 주소(도보 구간까지 정확히 계산).
+ * 둘 다 선택 안 하면(undefined) 통근 점수는 그냥 계산에서 빠진다.
+ */
+export type CommuteAnchor =
+  | { kind: "station"; stationName: string }
+  | { kind: "address"; address: string; lat?: number; lng?: number };
+
 export interface Profile {
   name: string;
   birthDate: string;
   residenceRegion: Region;
   residenceSince: string;
   desiredRegions: Region[];
+  /**
+   * 회사/학교 위치. 통근·통학 추천 점수(공고 위치가 지금 사는 곳보다 얼마나 가까워지는지)에
+   * 쓴다. 현재 거주지 좌표는 아직 없어서(residenceRegion은 시도 단위라 너무 넓음) 이것도
+   * 함께 받는다 — commuteFrom이 없으면 residenceRegion 중심 좌표로 대략 계산한다.
+   */
+  commuteFrom?: CommuteAnchor;
+  commuteTo?: CommuteAnchor;
   maritalStatus: "single" | "married" | "engaged";
   marriageDate?: string;
   householdSize: number;

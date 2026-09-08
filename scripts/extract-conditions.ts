@@ -102,7 +102,8 @@ async function main() {
       counts.failed++;
       console.log("failed (unexpected):", e instanceof Error ? e.message : e);
     }
-    await sleep(1500); // Gemini/마이홈포털 양쪽에 부담을 덜 준다
+    // Gemini 무료 티어는 분당 20회 한도라 요청당 최소 3초 간격이 필요하다. 여유를 두고 4초.
+    await sleep(4000);
   }
 
   console.log("완료:", counts);

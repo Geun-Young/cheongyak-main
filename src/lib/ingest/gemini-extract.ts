@@ -145,9 +145,16 @@ export interface ExtractionDraft {
 }
 
 const MODEL = "gemini-3.6-flash";
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** "Please retry in 9.78s" 같은 문구에서 대기 시간(ms)을 뽑는다. 없으면 null */
+function parseRetryDelayMs(message: string): number | null {
+  const m = message.match(/retry in ([\d.]+)s/i);
+  if (!m) return null;
+  return Math.ceil(Number(m[1]) * 1000);
+}
 
 /** PDF 바이트를 Gemini에 보내 자격요건 초안을 추출한다. 일시적 과부하(503)는 재시도한다 */
 export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Promise<ExtractionDraft> {
@@ -183,7 +190,10 @@ export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Pro
       const message = e instanceof Error ? e.message : String(e);
       const retryable = message.includes("503") || message.includes("UNAVAILABLE") || message.includes("429");
       if (!retryable || attempt >= MAX_RETRIES) throw e;
-      await sleep(3000 * attempt);
+      // 429(쿼터 초과)는 서버가 알려주는 "N초 후 재시도" 시간을 정확히 지킨다 — 짐작으로
+      // 짧게 재시도하면 분당 한도를 계속 다시 넘겨 실패만 반복하게 된다.
+      const serverDelay = parseRetryDelayMs(message);
+      await sleep(serverDelay !== null ? serverDelay + 1000 : 5000 * attempt);
     }
   }
   throw lastError;
