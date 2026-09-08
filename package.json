@@ -10,9 +10,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ingest:myhome": "tsx scripts/ingest-myhome.ts"
+    "ingest:myhome": "tsx scripts/ingest-myhome.ts",
+    "extract:conditions": "tsx scripts/extract-conditions.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.21.0",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",
     "lucide-react": "^1.41.0",

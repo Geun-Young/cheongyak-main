@@ -12,8 +12,9 @@
 - **인증**: 아직 없음. `/admin/*`는 로그인 게이트 없이 열려 있음(TODO로 표시해둠).
 - **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있고, **전부 `published + pending` 상태로 일반 사용자 화면에 바로 노출됨** (자격요건은 비어 있어 "확인 필요"로 표시).
 - **자동수집 스케줄은 지금 비활성 상태다** — 마이홈포털 API가 GitHub Actions의 해외 러너 IP를 403으로 차단해서, 하루 3회 크론이 실제로는 못 돈다. 당분간 `npm run ingest:myhome`을 필요할 때 로컬(한국 IP)에서 직접 실행한다. 자세한 배경은 8-1절.
+- **PDF→LLM 조건 추출 파이프라인이 실제로 동작한다**(9번 단계) — `npm run extract:conditions`로 공고 PDF를 Gemini에게 읽혀 자격요건 초안을 뽑고, `/admin/ai-drafts`에서 검수·반영까지 엔드투엔드로 검증 완료. 지금은 3건만 시범 처리된 상태 — 나머지 126건은 필요할 때 스크립트 실행하면 됨.
 - **지도**: 자리(placeholder)만 있고 실제 지도는 아직 안 붙음.
-- **다음으로 할 일 후보**: 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증, (여유 생기면) Vercel Pro로 국내 리전 자동화.
+- **다음으로 할 일 후보**: 나머지 126건 조건 추출 실행, 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증, (여유 생기면) Vercel Pro로 국내 리전 자동화.
 
 ---
 
@@ -150,14 +151,43 @@ GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 
 
 **결정**: 지금은 유료 인프라 없이 간다 — GitHub Actions의 `schedule` 크론을 주석 처리(비활성화)하고 `workflow_dispatch`(수동 실행)만 남김. 대신 `npm run ingest:myhome` 스크립트를 추가해 로컬(또는 향후 한국 리전 서버)에서 필요할 때 직접 수집하는 걸 당분간의 기본 운영 방식으로 함. `tsx`를 정식 devDependency로 승격(그동안 `npx tsx`로 온디맨드 설치해서 썼음).
 
+---
+
+### 9. PDF → Gemini 조건 추출 파이프라인 — 엔드투엔드 구축 및 검증
+
+사용자가 "공고마다 PDF 안에 가구별 자격조건·가점표가 있는데 이걸 읽어야 한다"고 요청. API로는 안 되고(마이홈포털 API는 목록/요약만 주고 세부 자격요건은 원래 없음), PDF를 직접 읽어야 한다고 판단 → 방식으로 "LLM 자동 초안 추출 + 관리자 검수"를 선택, 모델은 Gemini로 결정.
+
+**착수 전 실증(코드 작성 전에 손으로 먼저 확인)**:
+- 실제 공고 하나(`myhome-21160`)의 상세 페이지(`originalUrl`) HTML을 직접 받아 분석 → 첨부 PDF가 `fnDownFile(atchFileId, fileSn)`이라는 JS 함수로 다운로드되는 구조임을 발견. 실제로 `POST https://www.myhome.go.kr/hws/com/fms/cvplFileDownload.do` (body: atchFileId, fileSn)로 786KB짜리 진짜 PDF를 받는 데 성공.
+- 그 PDF를 Gemini(`gemini-3.6-flash`, `@google/genai` SDK, `responseSchema`로 구조화 출력 강제)에 바로 업로드해서 우리 `Condition`/`Tier`/`ScoreRule` 스키마 그대로 추출 성공. 결과 품질 확인: 자격요건·순위·가점표가 정확히 매핑됐고, 스키마로 표현 못 하는 항목(수급자 여부 등 복합조건)은 스스로 `notes`에 한계를 명시함 — 검수 유도가 의도대로 동작.
+- 참고: 처음 시도한 모델명 `gemini-2.5-flash`는 "신규 사용자에게 더 이상 제공 안 됨, `gemini-3.6-flash` 쓰라"는 404 에러로 안내받아 교체.
+
+**설계 원칙(마이그레이션 0002의 "소스/관리자 칸 분리"와 동일한 이유)**: AI가 만든 초안은 `supply_units.eligibility` 등 실제 판정 칸을 **절대 자동으로 덮어쓰지 않는다**. 검수 없이 잘못된 조건이 판정에 쓰이면 사용자에게 잘못된 정보를 주게 되기 때문. 대신 공고 단위로 `announcements.ai_draft`(jsonb)에 초안 전체를 저장하고, 관리자가 검수 화면에서 "이 유닛에 반영" 버튼을 눌러야 실제 `supply_units` 행에 옮겨진다.
+
+**구현**:
+- **마이그레이션 0003**(`supabase/migrations/0003_ai_extraction.sql`): `announcements`에 `notice_pdf_url`, `ai_draft`(jsonb), `ai_draft_status`(none/pending/extracted/approved/failed), `ai_draft_confidence`(high/medium/low), `ai_draft_notes`, `ai_draft_extracted_at`, `ai_draft_error` 추가.
+- **PDF 확보**(`lib/ingest/myhome-pdf.ts`): 상세 페이지 HTML에서 `fnDownFile(...)` 정규식 매칭으로 `atchFileId`/`fileSn` 추출 → POST로 다운로드. 첨부 없으면 null 반환(에러 아님).
+- **추출 로직**(`lib/ingest/gemini-extract.ts`): 시스템 프롬프트에 우리 `Field` enum 16개의 의미를 전부 명시(금액은 만원 단위, 기간은 개월 단위로 변환하라는 규칙 포함), `responseSchema`로 JSON 구조 강제. 503(과부하)/429는 재시도(최대 3회).
+- **배치 스크립트**(`scripts/extract-conditions.ts`, `npm run extract:conditions`): `ai_draft_status`가 `none`/`failed`인 공고를 순회하며 PDF 다운로드 → Gemini 추출 → DB 저장. `--limit=N`, `--id=<id>` 옵션 지원. 요청 간 1.5초 텀(API 부담 완화).
+- **관리자 검수 데이터 레이어**(`lib/data/ai-drafts.ts`, `server-only`): 초안 큐 조회, 상세 조회(실제 supply_units 목록과 함께), 초안 유닛 → 실제 유닛 승인 반영(`approveDraftToUnit`), 공고를 판정 가능(`review_status: ready`)으로 전환(`markAnnouncementReady`) — 이 둘은 별개 스위치다(조건 반영과 "이제 판정해도 된다" 선언은 다른 결정).
+- **API 라우트**: `/api/admin/ai-drafts/[id]/approve-unit`(초안 유닛→실제 유닛 반영), `/api/admin/announcements/[id]/mark-ready`(판정 가능 전환).
+- **관리자 UI**: `/admin/ai-drafts`(큐 목록, 확신도·상태 배지), `/admin/ai-drafts/[id]`(초안 상세 — 유닛별 자격요건/순위/가점표 표시, 반영할 실제 유닛을 드롭다운으로 선택 후 "이 유닛에 반영" 버튼, 마지막에 "판정 가능으로 전환" 버튼).
+
+**실행 검증(엔드투엔드, 진짜 데이터로)**:
+1. `npm run extract:conditions -- --limit=3` → 3건 전부 `extracted` 성공(제주 행복주택 confidence=high, 목포 영구임대 confidence=high, 기숙사형 청년주택 confidence=medium — 대학 거리·성적 등 우리 스키마 밖 항목이 있어서 스스로 낮춤).
+2. `/admin/ai-drafts`, `/admin/ai-drafts/[id]` 페이지가 실제로 초안 내용(자격요건 5개, 순위 2개, 가점표 3개 등)을 정확히 렌더링하는 것을 curl로 확인.
+3. `POST /api/admin/ai-drafts/myhome-21028/approve-unit` 실제 호출 → DB의 `supply_units` 행에 `eligibility`(5개)/`tiers`(2개)/`score_rules`(3개)가 정확히 반영됨을 직접 조회로 확인.
+4. `POST /api/admin/announcements/myhome-21028/mark-ready` 호출 → `review_status`가 `pending`→`ready`로 바뀜을 확인.
+5. **가장 중요한 검증**: 이렇게 반영된 실제 데이터로 `matchUnit()`을 직접 호출 — 가상의 지원자(목포시 거주·30세·무주택 등)를 넣었더니 `status: eligible`, `1순위`, `가점 67/85점`, 항목별 breakdown까지 정확히 계산됨. PDF의 텍스트가 실제 판정 결과로 이어지는 전체 경로가 살아있음을 확인.
+
 ## 아직 안 한 것 / 다음 단계 후보
 
 - **자동수집 재개 방법 찾기**: GitHub Actions Secrets는 등록 완료했지만 마이홈포털 API가 해외 러너 IP를 403으로 차단해서 `schedule` 크론을 비활성화한 상태(8-1절). 당분간 `npm run ingest:myhome`을 필요할 때 직접 실행. 재개 후보: Vercel Pro(서울 리전) 또는 집/사무실 PC·홈서버에서 도는 로컬 크론(cron/작업 스케줄러).
 - **재수집 idempotency 실증 검증**: `applyIngestedAnnouncements()`의 "해시 같으면 unchanged, 다르면 recheck 전환" 로직은 코드 리뷰 수준으로는 맞지만, 실제로 같은 데이터를 두 번 수집했을 때 unchanged로 잡히는지는 API 불안정으로 이번 세션에서 확인 못 함.
 - **관리자 큐 UI 완성**: 설계서 7장의 필터 탭(pending/recheck/매핑실패/중복의심/완료), 행 단위 액션(숨기기·유형 고치기·조건 템플릿 적용), 다중 유닛 조건 복사("첫 유닛 조건을 나머지에 복사")는 아직 — 지금은 집계 숫자와 컬럼 표시만 있음. 마이홈 데이터 58건이 다중 유닛이라 이게 없으면 검수 속도가 느림.
-- **판정 조건 실제 입력**: 129건 전부 `reviewStatus: pending`(자격요건 없음) — 관리자가 조건빌더로 채워야 실제 판정(순위·가점)이 동작. 지금 조건빌더는 유닛 1개만 편집 가능.
-- **청약홈(민간 APT) 연동**: 스펙 확보·1건 실호출까지 끝났고 어댑터 코드만 남음.
-- **PDF→LLM 조건 추출**: 사람이 조건을 일일이 입력하는 대신, 공고문 PDF나 원문 링크에서 자동 추출하는 파이프라인. 아직 손 안 댐.
+- **나머지 126건 조건 추출·검수**: `npm run extract:conditions`(전체 실행, `--limit` 생략)로 나머지 공고 PDF를 마저 추출하고, `/admin/ai-drafts`에서 하나씩 검수·반영. 3건은 이미 파이프라인 검증용으로 처리됨(그 중 1건은 실제로 ready 전환까지 완료).
+- **AI 추출 품질을 여러 건으로 더 확인**: 지금까지 3건만 봤다 — 표가 복잡하거나 이미지로만 된 PDF(스캔본 등)에서는 품질이 떨어질 수 있어 더 넓은 샘플로 확인 필요.
+- **청약홈(민간 APT) 연동**: 스펙 확보·1건 실호출까지 끝났고 어댑터 코드만 남음(PDF 추출 파이프라인은 마이홈포털 전용으로 짜여 있어 청약홈 연동 시 상세페이지 구조를 다시 조사해야 함).
 - **"조건 정리되면 알려주세요" 버튼 인증**: 지금은 로그인 여부·중복 클릭 방지 없이 누구나 호출 가능(`request_count`만 증가) — 회원 인증이 붙으면 사용자당 1회로 제한 필요.
 - **카카오맵 SDK 실연동**: `UnitLocationCard`에 자리만 파놓음. 실제 지도 렌더링, 주소→좌표 지오코딩 없음.
 - **인증(이메일/카카오)**: `/admin/*`에 로그인 게이트가 없어 지금은 `service_role`로 우회 중 — 보안상 임시 조치, **배포 금지 조건**(설계서 10장). 카카오 디벨로퍼스 앱 등록도 아직 안 함.
@@ -181,3 +211,6 @@ GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 
 - **마이홈포털 API의 매입임대(다가구주택) 데이터는 개별 유닛 식별자가 없다** — 면적·보증금·월세·주소 해시로 그룹핑해서 유닛을 만든다(`toUnitsByFieldGroup`).
 - **KST 기준 날짜 비교**: 자동 마감(`autoCloseExpiredAnnouncements`)은 서버가 어느 시간대에서 돌든 KST 자정 기준으로 비교하도록 `Date.now() + 9시간` 오프셋을 쓴다. 서버 UTC 기준으로 그냥 비교하면 9시간 일찍 마감된다.
 - **Windows 환경 팁**: `taskkill //PID <pid> //F`로 종료(POSIX `kill`이 안 먹는 프로세스가 있음), `netstat -ano | grep PORT`로 실제 PID 확인. Bash 도구에서 `command &`로 백그라운드 실행한 것은 세션이 끊기면 같이 죽을 수 있다 — 진짜 오래 걸리는 작업은 `run_in_background: true` 옵션을 쓰고 셸 안에서 `&`를 겹쳐 쓰지 않는다.
+- **Gemini 모델명은 `gemini-2.5-flash`가 아니라 `gemini-3.6-flash`다**(2026-09 기준) — 구 모델명으로 부르면 "신규 사용자에게 더 이상 제공 안 됨" 404가 난다. `@google/genai` SDK의 503(과부하)은 흔하니 재시도 로직 필수.
+- **AI 초안은 절대 자동으로 실제 판정 칸에 안 들어간다**: `ai_draft`(공고 레벨 jsonb)에만 저장되고, `supply_units.eligibility` 등으로 옮기려면 관리자가 검수 화면(`/admin/ai-drafts/[id]`)에서 유닛을 골라 명시적으로 "반영" 버튼을 눌러야 한다. 조건을 유닛에 반영하는 것과 공고를 `review_status: ready`로 전환하는 것도 서로 다른 별개 액션이다.
+- **마이홈포털 PDF 다운로드는 API가 아니라 상세 페이지 HTML 파싱이 필요하다**: `fnDownFile(atchFileId, fileSn)` 패턴을 정규식으로 찾은 뒤 `POST /hws/com/fms/cvplFileDownload.do`로 받는다(`lib/ingest/myhome-pdf.ts`). 목록 API에는 PDF 링크가 아예 없다.
