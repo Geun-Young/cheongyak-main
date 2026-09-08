@@ -218,6 +218,9 @@ async function extractWithModel(
       await sleep(5000 * attempt);
     }
   }
+  // 재시도를 모두 소진한 경우. 마지막 실패가 쿼터 문제였다면 그대로 알린다.
+  const lastMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  if (isQuotaError(lastMessage)) throw new GeminiQuotaExhaustedError(lastMessage);
   throw lastError;
 }
 

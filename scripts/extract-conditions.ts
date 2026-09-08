@@ -80,9 +80,13 @@ async function processOne(row: Row): Promise<"extracted" | "no_pdf" | "failed"> 
   } catch (e) {
     // 쿼터 소진은 이 공고의 문제가 아니다 — failed로 기록하면 "PDF에 문제가 있다"는
     // 잘못된 흔적이 남으므로, 상태를 건드리지 않고 그대로 위로 던져 배치를 멈추게 한다.
-    if (e instanceof GeminiQuotaExhaustedError) throw e;
-
+    // instanceof만 보면 안 된다: 503 재시도를 소진한 뒤 마지막에 429가 나는 경로처럼
+    // 원본 에러가 그대로 올라오는 경우가 있어서, 메시지로도 한 번 더 확인한다.
     const message = e instanceof Error ? e.message : String(e);
+    if (e instanceof GeminiQuotaExhaustedError || message.includes("429") || message.includes("RESOURCE_EXHAUSTED")) {
+      throw new GeminiQuotaExhaustedError(message);
+    }
+
     await supabase
       .from("announcements")
       .update({ ai_draft_status: "failed", ai_draft_error: message.slice(0, 500) })
