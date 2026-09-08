@@ -202,7 +202,7 @@ export function AiDraftReview({ detail, announcement }: { detail: AiDraftDetail;
 
       <Card className="bg-surface-2">
         <p className="text-[14px] text-ink-2">
-          위 유닛들에 조건을 다 확인·반영했으면, 이 공고를 사용자에게 "판정 가능"으로 표시하세요.
+          위 유닛들에 조건을 다 확인·반영했으면, 이 공고를 사용자에게 「판정 가능」으로 표시하세요.
         </p>
         <div className="mt-3">
           <MarkReadyButton announcementId={announcement.id} initialReady={announcement.reviewStatus === "ready"} />

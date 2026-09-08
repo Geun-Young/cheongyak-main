@@ -10,7 +10,7 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { fetchNoticePdf } from "../src/lib/ingest/myhome-pdf";
-import { extractDraftFromPdf } from "../src/lib/ingest/gemini-extract";
+import { extractDraftFromPdf, GeminiQuotaExhaustedError } from "../src/lib/ingest/gemini-extract";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -78,6 +78,10 @@ async function processOne(row: Row): Promise<"extracted" | "no_pdf" | "failed"> 
       .eq("id", row.id);
     return "extracted";
   } catch (e) {
+    // 쿼터 소진은 이 공고의 문제가 아니다 — failed로 기록하면 "PDF에 문제가 있다"는
+    // 잘못된 흔적이 남으므로, 상태를 건드리지 않고 그대로 위로 던져 배치를 멈추게 한다.
+    if (e instanceof GeminiQuotaExhaustedError) throw e;
+
     const message = e instanceof Error ? e.message : String(e);
     await supabase
       .from("announcements")
@@ -92,6 +96,8 @@ async function main() {
   console.log(`대상 ${targets.length}건`);
 
   const counts = { extracted: 0, no_pdf: 0, failed: 0 };
+  let stoppedByQuota = false;
+
   for (const [i, row] of targets.entries()) {
     process.stdout.write(`[${i + 1}/${targets.length}] ${row.title.slice(0, 30)}... `);
     try {
@@ -99,6 +105,11 @@ async function main() {
       counts[result]++;
       console.log(result);
     } catch (e) {
+      if (e instanceof GeminiQuotaExhaustedError) {
+        console.log("중단");
+        stoppedByQuota = true;
+        break;
+      }
       counts.failed++;
       console.log("failed (unexpected):", e instanceof Error ? e.message : e);
     }
@@ -107,6 +118,12 @@ async function main() {
   }
 
   console.log("완료:", counts);
+  if (stoppedByQuota) {
+    console.log(
+      "\nGemini 무료 쿼터가 바닥나서 여기서 멈췄어요. 한도가 회복되면(보통 다음 날)\n" +
+        "같은 명령을 다시 실행하면 남은 건부터 이어서 처리해요.",
+    );
+  }
 }
 
 main().catch((e) => {

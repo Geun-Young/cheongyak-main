@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import type { Announcement } from "@/lib/types";
 import { useFavorites, useProfile, deriveFacts } from "@/lib/profile";
+import { useAuth } from "@/lib/auth";
 import { matchAnnouncement } from "@/lib/matching";
 import { bracketLabel } from "@/lib/income";
 import { formatManwon } from "@/lib/format";
@@ -13,10 +14,23 @@ import { Button, ButtonLink, Card, Chip, Container, Empty, PageTitle, SegmentedC
 
 export function MyPageView({ items }: { items: Announcement[] }) {
   const router = useRouter();
-  const { profile, patch, logout } = useProfile();
+  const { profile, patch, loading } = useProfile();
+  const { isLoggedIn, signOut } = useAuth();
   const fav = useFavorites();
 
-  if (!profile) {
+  // 세션·프로필을 아직 읽는 중이면 판단을 미룬다. 이걸 안 하면 로그인한 사용자에게도
+  // 잠깐 "로그인이 필요해요"가 번쩍 보인다.
+  if (loading) {
+    return (
+      <Container className="py-10">
+        <Card>
+          <p className="text-ink-3">불러오는 중이에요.</p>
+        </Card>
+      </Container>
+    );
+  }
+
+  if (!isLoggedIn) {
     return (
       <Container className="py-10">
         <Card>
@@ -29,6 +43,21 @@ export function MyPageView({ items }: { items: Announcement[] }) {
                 <ButtonLink href="/signup" variant="secondary">가입하기</ButtonLink>
               </div>
             }
+          />
+        </Card>
+      </Container>
+    );
+  }
+
+  // 로그인은 했지만 아직 정보 입력(온보딩)을 안 한 상태
+  if (!profile) {
+    return (
+      <Container className="py-10">
+        <Card>
+          <Empty
+            title="정보 입력이 아직이에요"
+            body="6단계만 입력하면 공고마다 신청 가능 여부와 예상 순위를 계산해 드려요."
+            action={<ButtonLink href="/onboarding">정보 입력 시작하기</ButtonLink>}
           />
         </Card>
       </Container>
@@ -135,13 +164,16 @@ export function MyPageView({ items }: { items: Announcement[] }) {
 
           <Card>
             <h2 className="text-lg font-bold text-ink">계정</h2>
-            <p className="mt-1 text-sm text-ink-3">로그아웃하면 이 브라우저에 저장된 조건이 지워져요.</p>
+            <p className="mt-1 text-sm text-ink-3">
+              저장한 조건은 계정에 남아 있어서, 다시 로그인하면 그대로 이어서 볼 수 있어요.
+            </p>
             <Button
               variant="danger"
               className="mt-3 w-full"
-              onClick={() => {
-                logout();
+              onClick={async () => {
+                await signOut();
                 router.push("/");
+                router.refresh();
               }}
             >
               로그아웃

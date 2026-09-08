@@ -57,7 +57,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {isLoggedIn && profile ? (
+          {isLoggedIn ? (
             <>
               <Link
                 href="/notifications"
@@ -73,10 +73,10 @@ export function Header() {
               </Link>
               <Link href="/me" className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 hover:bg-brand-soft">
                 <span className="grid size-8 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand">
-                  {profile.name ? profile.name.slice(0, 1) : "나"}
+                  {profile?.name ? profile.name.slice(0, 1) : "나"}
                 </span>
                 <span className="hidden text-[15px] font-semibold text-ink sm:inline">
-                  {profile.name ? `${profile.name}님` : "내 정보"}
+                  {profile?.name ? `${profile.name}님` : "내 정보"}
                 </span>
               </Link>
             </>

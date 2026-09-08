@@ -156,12 +156,34 @@ function parseRetryDelayMs(message: string): number | null {
   return Math.ceil(Number(m[1]) * 1000);
 }
 
-/** PDF 바이트를 Gemini에 보내 자격요건 초안을 추출한다. 일시적 과부하(503)는 재시도한다 */
+/**
+ * 쿼터(분당/일일 요청 한도)가 바닥났을 때 던진다. 배치 호출부가 이걸 보고
+ * "이번 실행은 여기서 멈추고 다음에 이어서" 판단할 수 있게 별도 타입으로 구분한다 —
+ * 그냥 계속 다음 건으로 넘어가면 남은 건들이 전부 실패로 기록되면서 쿼터만 더 태운다.
+ */
+export class GeminiQuotaExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiQuotaExhaustedError";
+  }
+}
+
+function isQuotaError(message: string): boolean {
+  return message.includes("429") || message.includes("RESOURCE_EXHAUSTED");
+}
+
+/**
+ * PDF 바이트를 Gemini에 보내 자격요건 초안을 추출한다.
+ * 일시적 과부하(503)는 재시도하고, 쿼터 초과(429)는 재시도 한 번만 해본 뒤
+ * 그래도 막히면 GeminiQuotaExhaustedError로 즉시 포기한다(재시도가 쿼터를 더 태우므로).
+ */
 export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Promise<ExtractionDraft> {
   const ai = new GoogleGenAI({ apiKey });
   const base64 = pdfBytes.toString("base64");
 
   let lastError: unknown;
+  let quotaRetried = false;
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await ai.models.generateContent({
@@ -188,12 +210,22 @@ export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Pro
     } catch (e) {
       lastError = e;
       const message = e instanceof Error ? e.message : String(e);
-      const retryable = message.includes("503") || message.includes("UNAVAILABLE") || message.includes("429");
+
+      if (isQuotaError(message)) {
+        // 서버가 알려준 시간만큼 딱 한 번 기다려본다(분당 한도면 이걸로 풀린다).
+        // 그래도 막히면 일일 한도가 소진된 것이므로 배치를 멈추게 한다.
+        const serverDelay = parseRetryDelayMs(message);
+        if (!quotaRetried && serverDelay !== null && serverDelay <= 90_000) {
+          quotaRetried = true;
+          await sleep(serverDelay + 2000);
+          continue;
+        }
+        throw new GeminiQuotaExhaustedError(message);
+      }
+
+      const retryable = message.includes("503") || message.includes("UNAVAILABLE");
       if (!retryable || attempt >= MAX_RETRIES) throw e;
-      // 429(쿼터 초과)는 서버가 알려주는 "N초 후 재시도" 시간을 정확히 지킨다 — 짐작으로
-      // 짧게 재시도하면 분당 한도를 계속 다시 넘겨 실패만 반복하게 된다.
-      const serverDelay = parseRetryDelayMs(message);
-      await sleep(serverDelay !== null ? serverDelay + 1000 : 5000 * attempt);
+      await sleep(5000 * attempt);
     }
   }
   throw lastError;

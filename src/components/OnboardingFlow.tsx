@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
@@ -8,6 +8,7 @@ import type { IncomeBracket, Profile, Region } from "@/lib/types";
 import { REGIONS } from "@/lib/regions";
 import { BRACKETS, bracketLabel } from "@/lib/income";
 import { EMPTY_PROFILE, useProfile } from "@/lib/profile";
+import { useAuth } from "@/lib/auth";
 import { formatManwon } from "@/lib/format";
 import { FieldHelp } from "./FieldHelp";
 import { IncomeCalculator } from "./IncomeCalculator";
@@ -29,20 +30,23 @@ export function OnboardingFlow() {
   const router = useRouter();
   const params = useSearchParams();
   const { profile, save } = useProfile();
+  const { user } = useAuth();
 
   const initialStep = Math.max(0, STEPS.findIndex((s) => s.key === params.get("step")));
   const [step, setStep] = useState(initialStep === -1 ? 0 : initialStep);
-  const [draft, setDraft] = useState<Profile>(EMPTY_PROFILE);
-  const loaded = useRef(false);
+  // 사용자가 실제로 바꾼 값만 담는다. 화면에 보여줄 draft는 저장된 프로필 위에 이걸 얹어 만든다.
+  // (effect로 서버 값을 state에 복사하면, 값이 늦게 도착했을 때 덮어쓰기·깜빡임 문제가 생긴다)
+  const [edits, setEdits] = useState<Partial<Profile>>({});
 
-  useEffect(() => {
-    if (!loaded.current && profile) {
-      setDraft(profile);
-      loaded.current = true;
-    }
-  }, [profile]);
+  // 구글·카카오로 처음 들어온 사람은 프로필이 없다. 그쪽에서 받은 이름이 있으면
+  // 미리 채워서 같은 걸 또 입력하게 하지 않는다.
+  const socialMeta = user?.user_metadata as Record<string, unknown> | undefined;
+  const socialName = (socialMeta?.name ?? socialMeta?.full_name ?? socialMeta?.nickname) as string | undefined;
 
-  const patch = (p: Partial<Profile>) => setDraft((d) => ({ ...d, ...p }));
+  const base: Profile = profile ?? (socialName ? { ...EMPTY_PROFILE, name: socialName } : EMPTY_PROFILE);
+  const draft: Profile = { ...base, ...edits };
+
+  const patch = (p: Partial<Profile>) => setEdits((e) => ({ ...e, ...p }));
   const current = STEPS[step];
   const isLast = current.key === "done";
   const progress = Math.round((step / (STEPS.length - 1)) * 100);
