@@ -113,15 +113,16 @@ async function main() {
       counts.failed++;
       console.log("failed (unexpected):", e instanceof Error ? e.message : e);
     }
-    // Gemini 무료 티어는 분당 20회 한도라 요청당 최소 3초 간격이 필요하다. 여유를 두고 4초.
-    await sleep(4000);
+    // 마이홈포털(PDF 다운로드)과 Gemini 양쪽에 부담을 덜 준다.
+    // Gemini 한도는 분당이 아니라 하루 단위(모델당 20건)라 길게 기다릴 이유는 없다.
+    await sleep(1500);
   }
 
   console.log("완료:", counts);
   if (stoppedByQuota) {
     console.log(
-      "\nGemini 무료 쿼터가 바닥나서 여기서 멈췄어요. 한도가 회복되면(보통 다음 날)\n" +
-        "같은 명령을 다시 실행하면 남은 건부터 이어서 처리해요.",
+      "\n오늘 쓸 수 있는 Gemini 무료 한도를 다 썼어요(모델당 하루 20건, 후보 모델을 전부 소진).\n" +
+        "내일 같은 명령을 다시 실행하면 남은 건부터 이어서 처리해요.",
     );
   }
 }

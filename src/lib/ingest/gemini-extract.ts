@@ -144,17 +144,20 @@ export interface ExtractionDraft {
   notes: string;
 }
 
-const MODEL = "gemini-3.6-flash";
+/**
+ * 무료 티어 쿼터는 **모델별로 따로** 계산된다
+ * (quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier, 모델당 하루 20건).
+ * 그래서 한 모델이 하루치를 다 쓰면 다음 모델로 넘어가 계속 처리할 수 있다.
+ *
+ * 순서는 "품질 좋은 것부터". flash-lite는 실제 공고(자격 5·순위 2·가점 3개짜리
+ * 복잡한 가점표)로 비교했을 때 3.6-flash와 같은 결과를 냈으므로 대체로 써도 안전하다.
+ * GEMINI_MODEL 환경변수를 주면 그 모델만 쓴다.
+ */
+const MODEL_FALLBACKS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
+const MODELS = process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : MODEL_FALLBACKS;
 const MAX_RETRIES = 5;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** "Please retry in 9.78s" 같은 문구에서 대기 시간(ms)을 뽑는다. 없으면 null */
-function parseRetryDelayMs(message: string): number | null {
-  const m = message.match(/retry in ([\d.]+)s/i);
-  if (!m) return null;
-  return Math.ceil(Number(m[1]) * 1000);
-}
 
 /**
  * 쿼터(분당/일일 요청 한도)가 바닥났을 때 던진다. 배치 호출부가 이걸 보고
@@ -172,22 +175,18 @@ function isQuotaError(message: string): boolean {
   return message.includes("429") || message.includes("RESOURCE_EXHAUSTED");
 }
 
-/**
- * PDF 바이트를 Gemini에 보내 자격요건 초안을 추출한다.
- * 일시적 과부하(503)는 재시도하고, 쿼터 초과(429)는 재시도 한 번만 해본 뒤
- * 그래도 막히면 GeminiQuotaExhaustedError로 즉시 포기한다(재시도가 쿼터를 더 태우므로).
- */
-export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Promise<ExtractionDraft> {
-  const ai = new GoogleGenAI({ apiKey });
-  const base64 = pdfBytes.toString("base64");
-
+/** 한 모델로 한 번 시도한다. 503(과부하)만 재시도하고, 쿼터 초과는 즉시 위로 알린다 */
+async function extractWithModel(
+  ai: GoogleGenAI,
+  model: string,
+  base64: string,
+): Promise<ExtractionDraft> {
   let lastError: unknown;
-  let quotaRetried = false;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await ai.models.generateContent({
-        model: MODEL,
+        model,
         contents: [
           {
             role: "user",
@@ -211,17 +210,8 @@ export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Pro
       lastError = e;
       const message = e instanceof Error ? e.message : String(e);
 
-      if (isQuotaError(message)) {
-        // 서버가 알려준 시간만큼 딱 한 번 기다려본다(분당 한도면 이걸로 풀린다).
-        // 그래도 막히면 일일 한도가 소진된 것이므로 배치를 멈추게 한다.
-        const serverDelay = parseRetryDelayMs(message);
-        if (!quotaRetried && serverDelay !== null && serverDelay <= 90_000) {
-          quotaRetried = true;
-          await sleep(serverDelay + 2000);
-          continue;
-        }
-        throw new GeminiQuotaExhaustedError(message);
-      }
+      // 쿼터는 하루 단위(모델당 20건)라 기다려도 안 풀린다 — 바로 알려서 다음 모델로 넘어가게 한다.
+      if (isQuotaError(message)) throw new GeminiQuotaExhaustedError(message);
 
       const retryable = message.includes("503") || message.includes("UNAVAILABLE");
       if (!retryable || attempt >= MAX_RETRIES) throw e;
@@ -229,4 +219,30 @@ export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Pro
     }
   }
   throw lastError;
+}
+
+/**
+ * PDF 바이트를 Gemini에 보내 자격요건 초안을 추출한다.
+ * 무료 티어 쿼터가 모델별로 따로 계산되므로, 한 모델이 소진되면 다음 모델로 넘어간다.
+ * 후보를 전부 소진하면 GeminiQuotaExhaustedError를 던져 배치를 멈추게 한다.
+ */
+export async function extractDraftFromPdf(apiKey: string, pdfBytes: Buffer): Promise<ExtractionDraft> {
+  const ai = new GoogleGenAI({ apiKey });
+  const base64 = pdfBytes.toString("base64");
+
+  let quotaError: GeminiQuotaExhaustedError | null = null;
+
+  for (const model of MODELS) {
+    try {
+      return await extractWithModel(ai, model, base64);
+    } catch (e) {
+      if (e instanceof GeminiQuotaExhaustedError) {
+        quotaError = e;
+        continue; // 이 모델은 오늘 다 썼다. 다음 모델로.
+      }
+      throw e; // 쿼터 외 오류는 모델을 바꿔도 같을 가능성이 높다.
+    }
+  }
+
+  throw quotaError ?? new GeminiQuotaExhaustedError("모든 모델의 쿼터가 소진됐어요.");
 }

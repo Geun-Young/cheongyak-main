@@ -12,7 +12,7 @@
 - **인증**: 구글·카카오·이메일 로그인 구현 완료(12번 단계). 프로필·관심공고가 로그인 사용자는 DB(RLS로 본인 것만), 비로그인은 localStorage에 저장된다. `/me`·`/onboarding`·`/admin/*`은 proxy 단계에서 차단. **단, Supabase 대시보드에서 Google/Kakao provider를 켜야 소셜 버튼이 실제로 동작한다**(아직 안 켬).
 - **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건, 유닛 400건**이 DB에 있고, **전부 `published + pending` 상태로 일반 사용자 화면에 바로 노출됨** (자격요건은 비어 있어 "확인 필요"로 표시).
 - **자동수집 스케줄은 지금 비활성 상태다** — 마이홈포털 API가 GitHub Actions의 해외 러너 IP를 403으로 차단해서, 하루 3회 크론이 실제로는 못 돈다. 당분간 `npm run ingest:myhome`을 필요할 때 로컬(한국 IP)에서 직접 실행한다. 자세한 배경은 8-1절.
-- **PDF→LLM 조건 추출 파이프라인이 실제로 동작한다**(9번 단계) — `npm run extract:conditions`로 공고 PDF를 Gemini에게 읽혀 자격요건 초안을 뽑고, `/admin/ai-drafts`에서 검수·반영까지 엔드투엔드로 검증 완료. **지금은 Gemini 무료 쿼터가 소진돼 12건만 추출된 상태**(13번 단계) — 한도가 회복되면 같은 명령을 다시 실행하면 남은 113건을 이어서 처리한다.
+- **PDF→LLM 조건 추출 파이프라인이 실제로 동작한다**(9번 단계) — `npm run extract:conditions`로 공고 PDF를 Gemini에게 읽혀 자격요건 초안을 뽑고, `/admin/ai-drafts`에서 검수·반영까지 엔드투엔드로 검증 완료. Gemini 무료 한도는 모델당 하루 20건이라 모델 3개를 순회해 하루 약 60건 처리한다(13-1번). **초기 구축분(129건)은 이틀 정도 나눠 돌리면 끝나고, 정상 운영은 하루 신규 공고가 평균 2.8건이라 무료로 충분하다.**
 - **"어떤 유닛에 넣을지" 추천 기능을 설계 중**(11번 단계) — 자격 여부뿐 아니라 통근시간·당첨 가능성까지 반영한 추천 점수 + 한줄평. `Profile.commuteFrom`/`commuteTo` 타입만 먼저 추가된 상태, 실제 추천 로직은 인증 붙는 시점에 이어서.
 - **지도**: 자리(placeholder)만 있고 실제 지도는 아직 안 붙음.
 - **다음으로 할 일 후보**: 배치 추출 완료 확인 후 관리자 검수, 통근 추천 기능 계속 개발, 경쟁률 데이터 조사, 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일/카카오 인증, (여유 생기면) Vercel Pro로 국내 리전 자동화.
@@ -251,12 +251,27 @@ GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 
 
 **현재 상태**: extracted 12건 / failed 4건(진짜 실패) / none 113건. 쿼터가 회복되면 `npm run extract:conditions`를 다시 실행하면 된다.
 
+---
+
+### 13-1. 한도의 정체는 "분당"이 아니라 "하루" — 모델 순회로 3배 확보
+
+"하루 12건밖에 안 되냐"는 지적을 받고 에러의 `quotaId`를 정확히 읽어보니 **`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue 20** — 즉 분당이 아니라 **모델당 하루 20건**이었다. 10번·13번에서 "분당 20회"로 판단하고 대기 시간을 늘렸던 건 잘못된 진단이었다(그래서 아무리 기다려도 안 풀렸다).
+
+**해결**: `PerModel`이라는 데 착안해 다른 모델들의 쿼터를 실제로 확인해보니 별도로 계산되고 있었다(`gemini-3.6-flash`는 소진, `gemini-flash-latest`·`gemini-flash-lite-latest`는 사용 가능). 그래서 한 모델이 소진되면 **다음 모델로 자동 전환**하도록 `MODEL_FALLBACKS` 순회를 넣었다 — 하루 20건 → 약 60건.
+
+**품질 검증**: 대체 모델이 품질을 떨어뜨리면 의미가 없으므로, 가장 복잡한 공고(목포 영구임대 — 자격 5·순위 2·가점규칙 3개, 구간 5/4/4)로 `flash-lite`와 기존 모델 결과를 비교했다. 자격요건 항목·연산자·수치(24500, 4542), 가점 구간 수까지 **전부 동일**. 대체해도 안전하다고 판단.
+
+**부수 정리**: 하루 한도라 "잠깐 기다렸다 재시도"는 무의미하므로 `parseRetryDelayMs`와 관련 대기 로직 제거. 배치 요청 간격도 4초 → 1.5초(Gemini 한도가 분당이 아니므로 길게 쉴 이유가 없고, 마이홈포털 PDF 다운로드 부담만 고려하면 된다).
+
+**앞으로의 운영 비용 확인**: 초기 구축(129건)이 부담이지 정상 운영은 무료로 충분하다. DB의 `announced_at`을 집계해보니 **하루 평균 2.8건**(중앙값 2건, 관측된 최대 20건)이라, 하루 한도 60건 대비 20배 이상 여유가 있다.
+
 ## 아직 안 한 것 / 다음 단계 후보
 
 - **자동수집 재개 방법 찾기**: GitHub Actions Secrets는 등록 완료했지만 마이홈포털 API가 해외 러너 IP를 403으로 차단해서 `schedule` 크론을 비활성화한 상태(8-1절). 당분간 `npm run ingest:myhome`을 필요할 때 직접 실행. 재개 후보: Vercel Pro(서울 리전) 또는 집/사무실 PC·홈서버에서 도는 로컬 크론(cron/작업 스케줄러).
 - **재수집 idempotency 실증 검증**: `applyIngestedAnnouncements()`의 "해시 같으면 unchanged, 다르면 recheck 전환" 로직은 코드 리뷰 수준으로는 맞지만, 실제로 같은 데이터를 두 번 수집했을 때 unchanged로 잡히는지는 API 불안정으로 이번 세션에서 확인 못 함.
 - **관리자 큐 UI 완성**: 설계서 7장의 필터 탭(pending/recheck/매핑실패/중복의심/완료), 행 단위 액션(숨기기·유형 고치기·조건 템플릿 적용), 다중 유닛 조건 복사("첫 유닛 조건을 나머지에 복사")는 아직 — 지금은 집계 숫자와 컬럼 표시만 있음. 마이홈 데이터 58건이 다중 유닛이라 이게 없으면 검수 속도가 느림.
-- **남은 113건 추출 + 관리자 검수**: Gemini 쿼터가 회복되면 `npm run extract:conditions` 재실행(중단 지점부터 이어서 처리됨). 그 뒤 `/admin/ai-drafts`에서 하나씩 검수·반영. 무료 티어로는 하루에 다 못 돌 수 있으니 며칠 나눠 실행하거나 유료 전환 검토.
+- **남은 초기 구축분 추출 + 관리자 검수**: `npm run extract:conditions` 재실행(중단 지점부터 이어서 처리). 모델 순회로 하루 약 60건이라 이틀이면 끝난다. 그 뒤 `/admin/ai-drafts`에서 하나씩 검수·반영.
+- **영구 실패 건의 재시도 제외**: 지금 배치는 `failed` 상태도 매번 다시 시도한다. "PDF를 찾지 못했어요"처럼 재시도해도 계속 실패하는 건(현재 4건)이 매일 쿼터를 갉아먹는다 — 정상 운영(하루 2.8건) 대비 무시 못 할 비중이므로, 실패 횟수를 세서 N회 이상이면 대상에서 빼거나 별도 상태로 분리해야 한다.
 - **AI 추출 품질을 여러 건으로 더 확인**: 표가 복잡하거나 이미지로만 된 PDF(스캔본 등)에서는 품질이 떨어질 수 있어 더 넓은 샘플로 확인 필요.
 - **소셜 로그인 provider 켜기**: Supabase 대시보드 Authentication > Providers에서 Google/Kakao를 활성화해야 버튼이 실제로 동작한다. 각각 Google Cloud Console / 카카오 디벨로퍼스에서 OAuth 앱 등록 후 Client ID·Secret 입력 필요(둘 다 무료). Redirect URI는 `https://xzdmkehdljmomczjizjo.supabase.co/auth/v1/callback`.
 - **이메일 발송 업체 연결**: 이메일 가입은 확인 메일이 필요한데 Supabase 무료 플랜 기본 발송량이 시간당 2~3통이라 실서비스 불가. Resend 등 연결 필요(또는 소셜 로그인만 노출하고 이메일 가입은 나중에).
@@ -288,7 +303,8 @@ GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 
 - **Gemini 모델명은 `gemini-2.5-flash`가 아니라 `gemini-3.6-flash`다**(2026-09 기준) — 구 모델명으로 부르면 "신규 사용자에게 더 이상 제공 안 됨" 404가 난다. `@google/genai` SDK의 503(과부하)은 흔하니 재시도 로직 필수.
 - **AI 초안은 절대 자동으로 실제 판정 칸에 안 들어간다**: `ai_draft`(공고 레벨 jsonb)에만 저장되고, `supply_units.eligibility` 등으로 옮기려면 관리자가 검수 화면(`/admin/ai-drafts/[id]`)에서 유닛을 골라 명시적으로 "반영" 버튼을 눌러야 한다. 조건을 유닛에 반영하는 것과 공고를 `review_status: ready`로 전환하는 것도 서로 다른 별개 액션이다.
 - **마이홈포털 PDF 다운로드는 API가 아니라 상세 페이지 HTML 파싱이 필요하다**: `fnDownFile(atchFileId, fileSn)` 패턴을 정규식으로 찾은 뒤 `POST /hws/com/fms/cvplFileDownload.do`로 받는다(`lib/ingest/myhome-pdf.ts`). 목록 API에는 PDF 링크가 아예 없다.
-- **Gemini 무료 티어는 분당 20회이고, 재시도가 쿼터를 더 태운다**: 429를 만나면 재시도로 버티려 하면 안 된다 — 남은 작업까지 연쇄적으로 실패시키고 쿼터를 완전히 소진시킨다. `GeminiQuotaExhaustedError`로 구분해 **배치를 즉시 멈추고 다음에 이어서 하는 게** 옳다. 쿼터 실패는 `failed`로 기록하지 않는다(그 PDF의 잘못이 아니므로 잘못된 흔적이 남는다).
+- **Gemini 무료 한도는 "분당"이 아니라 모델당 하루 20건이다**(quotaId `GenerateRequestsPerDayPerProjectPerModel-FreeTier`). 429가 나면 **기다려도 안 풀리므로** 재시도로 버티면 안 된다 — 남은 작업까지 연쇄 실패시키고 쿼터만 태운다. 대신 **모델을 바꾸면 별도 쿼터**를 쓸 수 있어서 `MODEL_FALLBACKS`를 순회한다(하루 약 60건). 후보를 다 소진하면 `GeminiQuotaExhaustedError`로 배치를 멈추고 다음 날 이어서 한다. 쿼터 실패는 `failed`로 기록하지 않는다(그 PDF의 잘못이 아니라 잘못된 흔적이 남는다).
+- **429 에러는 `quotaId`를 봐야 정확하다**: 메시지의 "retry in Ns"만 보면 분당 한도처럼 오해하기 쉽다. `"quotaId":"...PerDay..."` / `"quotaValue":"20"` 필드를 확인해야 실제 단위를 알 수 있다.
 - **Supabase는 `example.com` 같은 도메인의 이메일을 거부한다** — 테스트 계정을 만들 땐 `gmail.com` 등 실제 존재하는 도메인 형식을 쓰고, `admin.createUser({ email_confirm: true })`로 확인 절차를 건너뛴다.
 - **`useProfile()`은 로그인 여부에 따라 저장 위치가 갈린다**(DB ↔ localStorage). 인터페이스는 같아서 컴포넌트는 차이를 몰라도 되지만, **`loading` 상태를 확인하지 않으면** 로그인한 사용자에게도 첫 렌더에 "로그인이 필요해요"가 번쩍 보인다.
 - **effect에서 서버 값을 state로 복사하지 말 것**: 이 프로젝트의 린트(`react-hooks/set-state-in-effect`)가 막는다. 값이 늦게 도착했을 때 사용자 입력을 덮어쓰는 버그도 생긴다. 대신 "서버 값 + 사용자가 바꾼 것(`edits`)"을 렌더 시점에 합치는 파생 값으로 만든다(`OnboardingFlow`, `useProfile` 참고).
