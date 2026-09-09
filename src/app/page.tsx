@@ -202,7 +202,7 @@ export default async function LandingPage() {
                 <li>관심 공고를 모아두고 순위·가점 내역을 언제든 다시 봐요.</li>
               </ul>
               <ButtonLink href="/signup" variant="inverse" size="lg" className="mt-5 w-full">
-                카카오로 3초 만에 시작
+                3초 만에 시작하기
               </ButtonLink>
             </div>
             <Card>

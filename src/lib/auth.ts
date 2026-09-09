@@ -94,6 +94,12 @@ export type OAuthProvider = "google" | "kakao";
 /**
  * 소셜 로그인. Supabase 대시보드(Authentication > Providers)에서 해당 provider를
  * 켜두어야 동작한다. 꺼져 있으면 Supabase가 에러를 돌려주므로 사용자에게 안내한다.
+ *
+ * 카카오 주의: Supabase는 카카오 요청에 account_email scope를 **강제로** 넣는다
+ * (options.scopes로 덮어쓸 수 없고 뒤에 추가만 된다). 그런데 이메일 동의항목은 개인
+ * 개발자 앱에서 잠겨 있어서(비즈앱 전환 필요) 그대로 두면 KOE205가 난다.
+ * 그래서 카카오 버튼은 NEXT_PUBLIC_ENABLE_KAKAO_LOGIN으로 가려두고, 비즈앱 전환이
+ * 끝나면 그 값만 켜면 된다. (SocialLoginButtons 참고)
  */
 export async function signInWithOAuth(
   provider: OAuthProvider,

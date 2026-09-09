@@ -7,6 +7,14 @@ import { GoogleIcon } from "./GoogleIcon";
 import { KakaoIcon } from "./KakaoIcon";
 
 /**
+ * 카카오 로그인은 Supabase가 account_email scope를 강제로 붙이는데, 그 동의항목은
+ * 개인 개발자 앱에서 잠겨 있어(비즈앱 전환 필요) 지금 누르면 KOE205가 난다.
+ * 되지 않는 버튼을 보여주느니 가려둔다 — 비즈앱 전환이 끝나면
+ * .env.local에 NEXT_PUBLIC_ENABLE_KAKAO_LOGIN=true 만 넣으면 다시 나온다.
+ */
+const KAKAO_ENABLED = process.env.NEXT_PUBLIC_ENABLE_KAKAO_LOGIN === "true";
+
+/**
  * 구글·카카오 로그인 버튼. 로그인·가입 화면이 같은 걸 쓴다.
  * OAuth는 가입/로그인이 한 흐름이라(계정이 없으면 자동 생성) 두 화면에서 문구만 다르다.
  */
@@ -29,16 +37,18 @@ export function SocialLoginButtons({ next, label }: { next?: string; label: "log
 
   return (
     <div className="space-y-2">
-      <Button
-        variant="kakao"
-        size="lg"
-        className="w-full"
-        disabled={pending !== null}
-        onClick={() => start("kakao")}
-      >
-        <KakaoIcon />
-        {pending === "kakao" ? "카카오로 이동 중..." : `카카오${suffix}`}
-      </Button>
+      {KAKAO_ENABLED && (
+        <Button
+          variant="kakao"
+          size="lg"
+          className="w-full"
+          disabled={pending !== null}
+          onClick={() => start("kakao")}
+        >
+          <KakaoIcon />
+          {pending === "kakao" ? "카카오로 이동 중..." : `카카오${suffix}`}
+        </Button>
+      )}
       <Button
         variant="secondary"
         size="lg"
