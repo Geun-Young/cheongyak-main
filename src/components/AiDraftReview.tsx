@@ -6,6 +6,14 @@ import type { Announcement } from "@/lib/types";
 import type { AiDraftDetail } from "@/lib/data/ai-drafts";
 import { Button, ButtonLink, Card, Chip, Select, cx } from "./ui";
 
+/** otherRequirements.kind를 화면에 보여줄 한국어 라벨로 */
+const OTHER_KIND_LABEL: Record<string, string> = {
+  eligibility: "자격",
+  tier: "순위",
+  score: "가점",
+  other: "안내",
+};
+
 const CONFIDENCE_LABEL: Record<string, { label: string; tone: "ok" | "warn" | "danger" }> = {
   high: { label: "확신 높음", tone: "ok" },
   medium: { label: "확신 보통", tone: "warn" },
@@ -82,6 +90,28 @@ function DraftUnitCard({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {draftUnit.otherRequirements && draftUnit.otherRequirements.length > 0 && (
+        <div className="mt-3 rounded-md border border-warn/30 bg-warn-soft/40 p-3">
+          <p className="text-[13px] font-semibold text-warn">
+            자동 판정에 못 쓰는 조건 {draftUnit.otherRequirements.length}개
+          </p>
+          <p className="mt-0.5 text-[12px] text-ink-3">
+            우리 항목으로 표현할 수 없어서 판정에서 빠지는 조건이에요. 사용자에게는 원문 확인이 필요하다고 안내돼요.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {draftUnit.otherRequirements.map((o, i) => (
+              <li key={i} className="text-[14px] text-ink">
+                <span className="mr-1.5 rounded-sm bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-ink-3">
+                  {OTHER_KIND_LABEL[o.kind] ?? o.kind}
+                </span>
+                {o.label}
+                {o.detail && <span className="block pl-1 text-[12px] text-ink-3">{o.detail}</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -79,8 +79,28 @@ const responseSchema = {
               required: ["label", "field", "bands"],
             },
           },
+          otherRequirements: {
+            type: Type.ARRAY,
+            description:
+              "우리 필드로 표현할 수 없지만 신청 자격에 실제로 영향을 주는 조건들. " +
+              "예: '해당 산업단지 재직자', '대학생 계층은 자동차 미소유', '수급자 증명서 필요'. " +
+              "판정에는 못 쓰지만 사용자가 반드시 알아야 하는 내용이므로 빠뜨리지 말 것.",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                label: { type: Type.STRING, description: "조건을 한 문장으로. 예: '해당 산업단지 재직 중일 것'" },
+                kind: {
+                  type: Type.STRING,
+                  enum: ["eligibility", "tier", "score", "other"],
+                  description: "이 조건의 성격: 자격요건/순위/가점/기타",
+                },
+                detail: { type: Type.STRING, description: "공고문의 원문 표현이나 부연 설명(선택)" },
+              },
+              required: ["label", "kind"],
+            },
+          },
         },
-        required: ["name", "eligibility", "tiers", "scoreRules"],
+        required: ["name", "eligibility", "tiers", "scoreRules", "otherRequirements"],
       },
     },
     notes: { type: Type.STRING, description: "추출하며 애매했던 점, 사람이 반드시 확인해야 할 부분" },
@@ -115,7 +135,9 @@ const SYSTEM_PROMPT = `너는 한국 공공주택 청약 공고문을 읽고 자
 4. eligibility는 "반드시 만족해야 하는" 자격요건만, tiers는 "순위를 가르는" 조건만, scoreRules는 "가점표"만 넣어라.
 5. 공고문에 여러 주택형(전용면적별)이 있고 조건이 다르면 unitsFound에 각각 넣어라. 조건이 다 같으면 하나로 묶어도 된다.
 6. label은 사람이 읽기 자연스러운 한국어 문장으로(예: "소득 100% 이하", "무주택 세대구성원").
-7. 확신이 없는 부분은 confidence를 낮추고 notes에 구체적으로 적어라 — 이건 관리자가 검수할 초안이니 틀려도 되지만, 틀릴 수 있다는 걸 숨기면 안 된다.`;
+7. 확신이 없는 부분은 confidence를 낮추고 notes에 구체적으로 적어라 — 이건 관리자가 검수할 초안이니 틀려도 되지만, 틀릴 수 있다는 걸 숨기면 안 된다.
+8. **위 16개 필드로 표현할 수 없는 조건은 버리지 말고 otherRequirements에 담아라.** 예: "해당 산업단지 재직자", "대학생 계층은 자동차 미소유", "수급자 증명서 제출", "국가유공자 유족", "혼인신고 예정 증빙". 이런 조건은 자동 판정에는 못 쓰지만 신청 자격을 실제로 좌우하므로, 사용자가 원문을 확인할 때 놓치지 않도록 반드시 남겨야 한다.
+9. otherRequirements의 kind는 그 조건이 원래 어디에 속하는지 표시한다: 반드시 만족해야 하면 "eligibility", 순위를 가르면 "tier", 가점이면 "score", 그 외 안내사항이면 "other".`;
 
 export type DraftCondition = Omit<Condition, "id">;
 
@@ -131,11 +153,23 @@ export interface DraftScoreRule {
   bands: ScoreBand[];
 }
 
+/**
+ * 우리 Field 16개로는 표현할 수 없지만 신청 자격에 영향을 주는 조건.
+ * 자동 판정에는 못 쓰지만 버리면 안 되는 정보라, 화면에 "참고 조건"으로 따로 보여준다.
+ */
+export interface DraftOtherRequirement {
+  label: string;
+  kind: "eligibility" | "tier" | "score" | "other";
+  detail?: string;
+}
+
 export interface DraftUnit {
   name: string;
   eligibility: DraftCondition[];
   tiers: DraftTier[];
   scoreRules: DraftScoreRule[];
+  /** 구조화 못 한 조건들. 예전 초안에는 없을 수 있어 optional */
+  otherRequirements?: DraftOtherRequirement[];
 }
 
 export interface ExtractionDraft {
