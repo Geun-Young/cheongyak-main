@@ -41,15 +41,25 @@ export async function updateSession(request: NextRequest) {
   // 로그인이 필요한 경로를 여기서 막는다. 화면 안에서만 막으면 잠깐 내용이 보였다가
   // 사라지는 깜빡임이 생기고, 서버 컴포넌트가 이미 데이터를 읽은 뒤라 낭비도 된다.
   const { pathname } = request.nextUrl;
-  const needsAuth = ["/me", "/onboarding", "/notifications", "/admin"].some(
-    (p) => pathname === p || pathname.startsWith(p + "/"),
-  );
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  const needsAuth =
+    isAdminPath ||
+    ["/me", "/onboarding", "/notifications"].some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (needsAuth && !user) {
     const loginUrl = new URL("/login", request.url);
     // 로그인 후 원래 가려던 곳으로 돌려보낸다.
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // 관리자 화면은 로그인만으로는 부족하다. admins 테이블에 등록된 사람만 통과시킨다.
+  // 이 조회는 /admin/* 요청에만 하므로 일반 페이지 성능에는 영향이 없다.
+  if (isAdminPath && user) {
+    const { isAdmin } = await import("@/lib/data/admins");
+    if (!(await isAdmin(user.id))) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
   }
 
   return response;
