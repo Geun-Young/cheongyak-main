@@ -1,4 +1,4 @@
-import type { Announcement, Condition, ScoreRule, SupplyUnit, Tier } from "@/lib/types";
+import type { Announcement, Condition, OtherRequirement, ScoreRule, SupplyUnit, Tier } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -49,6 +49,7 @@ interface SupplyUnitRow {
   eligibility: Condition[];
   tiers: Tier[];
   score_rules: ScoreRule[];
+  other_requirements: OtherRequirement[] | null;
   active: boolean;
 }
 
@@ -68,6 +69,7 @@ function toUnit(row: SupplyUnitRow): SupplyUnit {
     eligibility: row.eligibility,
     tiers: row.tiers,
     scoreRules: row.score_rules,
+    otherRequirements: row.other_requirements ?? undefined,
     active: row.active,
   };
 }

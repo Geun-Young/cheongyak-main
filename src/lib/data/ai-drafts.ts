@@ -17,6 +17,8 @@ export interface AiDraftSummary {
   aiDraftError: string | null;
   aiDraftExtractedAt: string | null;
   noticePdfUrl: string | null;
+  /** 공고 원문 링크. 추출에 실패한 건은 관리자가 여기로 직접 들어가 확인해야 한다 */
+  originalUrl: string;
 }
 
 export interface AiDraftDetail extends AiDraftSummary {
@@ -29,7 +31,7 @@ export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("announcements")
-    .select("id, title, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .in("ai_draft_status", ["extracted", "failed", "approved"])
     .order("ai_draft_extracted_at", { ascending: false });
   if (error) throw error;
@@ -43,6 +45,7 @@ export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
     aiDraftError: r.ai_draft_error,
     aiDraftExtractedAt: r.ai_draft_extracted_at,
     noticePdfUrl: r.notice_pdf_url,
+    originalUrl: r.original_url,
   }));
 }
 
@@ -51,7 +54,7 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
   const supabase = createAdminClient();
   const { data: a, error } = await supabase
     .from("announcements")
-    .select("id, title, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .eq("id", announcementId)
     .maybeSingle();
   if (error) throw error;
@@ -72,6 +75,7 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
     aiDraftError: a.ai_draft_error,
     aiDraftExtractedAt: a.ai_draft_extracted_at,
     noticePdfUrl: a.notice_pdf_url,
+    originalUrl: a.original_url,
     aiDraft: a.ai_draft,
     supplyUnitIds: units ?? [],
   };
@@ -116,6 +120,8 @@ export async function approveDraftToUnit(
       eligibility: draftConditionsToConditions(supplyUnitId, draftUnit.eligibility),
       tiers: draftTiersToTiers(supplyUnitId, draftUnit.tiers),
       score_rules: draftScoreRulesToScoreRules(supplyUnitId, draftUnit.scoreRules),
+      // 자동 판정엔 못 쓰지만 사용자가 알아야 하는 조건들. 승인 시 함께 옮긴다.
+      other_requirements: draftUnit.otherRequirements ?? [],
     })
     .eq("id", supplyUnitId)
     .eq("announcement_id", announcementId);

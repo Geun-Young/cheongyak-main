@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Info, X } from "lucide-react";
 import type { Announcement, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
@@ -141,6 +141,26 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
                 </li>
               );
             })}
+          </ul>
+        </Card>
+      )}
+
+      {unit.otherRequirements && unit.otherRequirements.length > 0 && r.status !== "closed" && (
+        <Card className="border-warn/30">
+          <h3 className="text-base font-bold text-ink">직접 확인이 필요한 조건</h3>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+            아래 조건은 입력하신 정보로는 자동으로 확인할 수 없어요. 해당되는지 공고문에서 꼭 확인하세요.
+          </p>
+          <ul className="mt-3 space-y-2.5">
+            {unit.otherRequirements.map((o, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <Info size={17} className="mt-0.5 shrink-0 text-warn" strokeWidth={2.2} />
+                <span>
+                  <span className="text-[15px] text-ink">{o.label}</span>
+                  {o.detail && <span className="block text-[13px] leading-snug text-ink-3">{o.detail}</span>}
+                </span>
+              </li>
+            ))}
           </ul>
         </Card>
       )}

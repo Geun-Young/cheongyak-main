@@ -76,6 +76,18 @@ export interface ScoreRule {
 }
 
 /**
+ * 우리 Field 16개로는 표현할 수 없지만 신청 자격에 실제로 영향을 주는 조건.
+ * 예: "해당 산업단지 재직자", "대학생 계층은 자동차 미소유", "수급자 증명서 제출".
+ * 자동 판정에는 못 쓰지만 버리면 사용자가 놓치게 되므로, 화면에 "추가 조건"으로 함께 보여준다.
+ * kind는 이 조건이 원래 어디에 속하는지다(자격/순위/가점/안내).
+ */
+export interface OtherRequirement {
+  label: string;
+  kind: "eligibility" | "tier" | "score" | "other";
+  detail?: string;
+}
+
+/**
  * 공고 하나에 딸린 공급유닛 하나(예: "전용 36㎡ A타입").
  * 자격요건·순위·가점표·위치는 유닛마다 다를 수 있어 여기에 둔다.
  */
@@ -98,6 +110,8 @@ export interface SupplyUnit {
   eligibility: Condition[];
   tiers: Tier[];
   scoreRules: ScoreRule[];
+  /** 자동 판정에 쓸 수 없는 조건들. 화면에서 "추가 조건"으로 안내한다 */
+  otherRequirements?: OtherRequirement[];
   /** 수집기가 소스에서 더 이상 이 유닛을 못 찾으면 false. 삭제하지 않고 숨기기만 한다 */
   active?: boolean;
 }
