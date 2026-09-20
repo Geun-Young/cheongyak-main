@@ -18,6 +18,18 @@ const STATUS_LABEL: Record<string, { label: string; tone: "ok" | "info" | "dange
   failed: { label: "추출 실패", tone: "danger" },
 };
 
+/**
+ * 마감까지 남은 일수를 배지로. 검수 순서를 정하는 유일한 실질 기준이라 가장 눈에 띄게 둔다.
+ * (확신도는 접수중 공고가 전부 high라 정렬·구분에 쓸 수 없었다)
+ */
+function deadlineChip(daysLeft: number): { label: string; tone: "danger" | "warn" | "muted" | "info" } {
+  if (daysLeft < 0) return { label: `마감 ${-daysLeft}일 지남`, tone: "muted" };
+  if (daysLeft === 0) return { label: "오늘 마감", tone: "danger" };
+  if (daysLeft <= 3) return { label: `D-${daysLeft}`, tone: "danger" };
+  if (daysLeft <= 7) return { label: `D-${daysLeft}`, tone: "warn" };
+  return { label: `D-${daysLeft}`, tone: "info" };
+}
+
 /** 원인을 사람 말로. 관리자가 "다시 돌리면 되는지 / 손으로 넣어야 하는지" 바로 알 수 있게 */
 function failureReason(error: string | null): { label: string; retryable: boolean } {
   const e = error ?? "";
@@ -35,16 +47,22 @@ function failureReason(error: string | null): { label: string; retryable: boolea
 
 export default async function AiDraftsQueuePage() {
   const queue = await getAiDraftQueue();
-  const failed = queue.filter((q) => q.aiDraftStatus === "failed");
+  const failed = queue.filter((q) => q.aiDraftStatus === "failed" && q.daysLeft >= 0);
   const rest = queue.filter((q) => q.aiDraftStatus !== "failed");
-  const pending = rest.filter((q) => q.aiDraftStatus === "extracted").length;
-  const approved = rest.filter((q) => q.aiDraftStatus === "approved").length;
+
+  // 마감된 공고는 검수해도 사용자가 볼 수 없다. 큐에서 내리고 레거시로 접어둔다 —
+  // 지우지는 않는다(과거 공고는 경쟁률·추천 근거로 쓸 자산이고, 내용 확인도 가능해야 한다).
+  const live = rest.filter((q) => q.daysLeft >= 0);
+  const legacy = rest.filter((q) => q.daysLeft < 0);
+  const pending = live.filter((q) => q.aiDraftStatus === "extracted").length;
+  const approved = live.filter((q) => q.aiDraftStatus === "approved").length;
+  const urgent = live.filter((q) => q.aiDraftStatus === "extracted" && q.daysLeft <= 7).length;
 
   return (
     <Container className="py-6 md:py-10">
       <PageTitle
         title="AI 조건 추출 검수"
-        lead={`검수 대기 ${pending}건 · 반영 완료 ${approved}건${failed.length > 0 ? ` · 추출 실패 ${failed.length}건` : ""}`}
+        lead={`접수 중인 공고 기준 · 검수 대기 ${pending}건${urgent > 0 ? ` (7일 내 마감 ${urgent}건)` : ""} · 반영 완료 ${approved}건${failed.length > 0 ? ` · 추출 실패 ${failed.length}건` : ""}`}
       />
 
       <p className="mt-4 text-[13px] text-ink-3">
@@ -94,24 +112,28 @@ export default async function AiDraftsQueuePage() {
       )}
 
       <section className="mt-8">
-        {failed.length > 0 && <h2 className="mb-3 text-lg font-bold text-ink">검수 대기 · 완료</h2>}
+        <h2 className="mb-1 text-lg font-bold text-ink">접수 중 {live.length}건</h2>
+        <p className="mb-3 text-[13px] text-ink-2">마감이 가까운 순서예요. 위에서부터 처리하면 돼요.</p>
         <div className="space-y-3">
-          {rest.length === 0 && (
+          {live.length === 0 && (
             <Card>
-              <p className="text-ink-2">아직 추출된 초안이 없어요.</p>
+              <p className="text-ink-2">접수 중인 공고 중 검수할 초안이 없어요.</p>
             </Card>
           )}
-          {rest.map((q) => {
+          {live.map((q) => {
             const status = STATUS_LABEL[q.aiDraftStatus] ?? STATUS_LABEL.extracted;
             const confidence = q.aiDraftConfidence ? CONFIDENCE_LABEL[q.aiDraftConfidence] : null;
+            const dday = deadlineChip(q.daysLeft);
             return (
               <Card key={q.id} padded={false}>
                 <Link href={`/admin/ai-drafts/${q.id}`} className="block p-4 hover:bg-surface-2">
                   <div className="flex flex-wrap items-center gap-2">
+                    <Chip size="sm" tone={dday.tone}>{dday.label}</Chip>
                     <Chip size="sm" tone={status.tone}>{status.label}</Chip>
                     {confidence && <Chip size="sm" tone={confidence.tone}>{confidence.label}</Chip>}
                     <h3 className="font-semibold text-ink">{q.title}</h3>
                   </div>
+                  <p className="mt-1 text-[12px] text-ink-3">접수 마감 {q.applyEnd}</p>
                   {q.aiDraftNotes && <p className="mt-2 text-[13px] text-ink-3 line-clamp-2">{q.aiDraftNotes}</p>}
                 </Link>
               </Card>
@@ -119,6 +141,31 @@ export default async function AiDraftsQueuePage() {
           })}
         </div>
       </section>
+
+      {legacy.length > 0 && (
+        <section className="mt-10">
+          <details>
+            <summary className="cursor-pointer text-[15px] font-bold text-ink-2 hover:text-ink">
+              마감된 공고 {legacy.length}건 (레거시 · 사용자에게 보이지 않음)
+            </summary>
+            <p className="mt-2 text-[13px] text-ink-3">
+              접수가 끝나 사용자 목록에서는 빠진 공고예요. 지우지 않고 보관합니다 — 내용 확인은 가능해요.
+            </p>
+            <div className="mt-3 space-y-2">
+              {legacy.map((q) => (
+                <Card key={q.id} padded={false} className="opacity-70">
+                  <Link href={`/admin/ai-drafts/${q.id}`} className="block p-3 hover:bg-surface-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Chip size="sm" tone="muted">{deadlineChip(q.daysLeft).label}</Chip>
+                      <h3 className="text-[14px] font-semibold text-ink-2">{q.title}</h3>
+                    </div>
+                  </Link>
+                </Card>
+              ))}
+            </div>
+          </details>
+        </section>
+      )}
     </Container>
   );
 }

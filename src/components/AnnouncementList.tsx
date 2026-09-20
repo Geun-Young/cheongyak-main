@@ -11,12 +11,16 @@ import { Empty, Select, cx } from "./ui";
 export type ListTab = "all" | EligibilityStatus | "urgent";
 type SortKey = "deadline" | "newest";
 
+/**
+ * 목록에 들어오는 건 접수 중인 공고뿐이라(getAnnouncements가 마감을 걸러낸다) "마감" 탭은
+ * 항상 0건이 된다. 그래서 탭에서 뺐다 — 눌러도 빈 화면만 나오는 탭은 없느니만 못하다.
+ * ListTab 타입에는 closed가 남아 있다: 상세 페이지 판정은 여전히 closed일 수 있다.
+ */
 const TABS: { key: ListTab; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "eligible", label: "신청 가능" },
   { key: "ineligible", label: "조건 미달" },
   { key: "needs_review", label: "확인 필요" },
-  { key: "closed", label: "마감" },
 ];
 
 export function isUrgent(a: Announcement, summary?: AnnouncementMatchSummary): boolean {

@@ -19,6 +19,10 @@ export interface AiDraftSummary {
   noticePdfUrl: string | null;
   /** 공고 원문 링크. 추출에 실패한 건은 관리자가 여기로 직접 들어가 확인해야 한다 */
   originalUrl: string;
+  /** 접수 마감일(YYYY-MM-DD). 검수 우선순위를 정하는 실질적인 기준이다 */
+  applyEnd: string;
+  /** 오늘(KST) 기준 남은 일수. 음수면 이미 마감된 공고(=지금 검수해도 아무도 못 본다) */
+  daysLeft: number;
 }
 
 export interface AiDraftDetail extends AiDraftSummary {
@@ -26,15 +30,26 @@ export interface AiDraftDetail extends AiDraftSummary {
   supplyUnitIds: { id: string; name: string }[];
 }
 
-/** 초안이 추출된(검수 대기 중인) 공고 목록. 큐 화면에서 쓴다 */
+/**
+ * 초안이 추출된(검수 대기 중인) 공고 목록. 큐 화면에서 쓴다.
+ *
+ * **마감 임박 순**으로 준다. 검수는 결국 "사용자가 신청할 수 있게" 하는 일이라,
+ * 마감이 가까운 것부터 처리해야 실제로 쓸모가 생긴다. 추출 시각순은 의미가 없었다.
+ * 확신도로 정렬하지 않는 이유: 실제 데이터가 접수중 63건 전부 high라 정렬이 안 된다.
+ * 이미 마감된 건(daysLeft < 0)은 검수해도 아무도 못 보므로 화면에서 뒤로 미룬다.
+ */
 export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("announcements")
-    .select("id, title, original_url, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, apply_end, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .in("ai_draft_status", ["extracted", "failed", "approved"])
-    .order("ai_draft_extracted_at", { ascending: false });
+    .order("apply_end", { ascending: true });
   if (error) throw error;
+
+  // KST 자정 기준으로 남은 일수를 센다(서버가 UTC여도 날짜가 하루 밀리지 않게).
+  const todayKst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const todayMs = new Date(todayKst).getTime();
 
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -46,6 +61,8 @@ export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
     aiDraftExtractedAt: r.ai_draft_extracted_at,
     noticePdfUrl: r.notice_pdf_url,
     originalUrl: r.original_url,
+    applyEnd: r.apply_end,
+    daysLeft: Math.round((new Date(r.apply_end).getTime() - todayMs) / 86400000),
   }));
 }
 
@@ -54,7 +71,7 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
   const supabase = createAdminClient();
   const { data: a, error } = await supabase
     .from("announcements")
-    .select("id, title, original_url, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, apply_end, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .eq("id", announcementId)
     .maybeSingle();
   if (error) throw error;
@@ -76,6 +93,12 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
     aiDraftExtractedAt: a.ai_draft_extracted_at,
     noticePdfUrl: a.notice_pdf_url,
     originalUrl: a.original_url,
+    applyEnd: a.apply_end,
+    daysLeft: Math.round(
+      (new Date(a.apply_end).getTime() -
+        new Date(new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)).getTime()) /
+        86400000,
+    ),
     aiDraft: a.ai_draft,
     supplyUnitIds: units ?? [],
   };

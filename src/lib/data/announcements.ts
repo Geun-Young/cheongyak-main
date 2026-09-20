@@ -116,27 +116,30 @@ function groupUnitsByAnnouncement(unitRows: SupplyUnitRow[]): Map<string, Supply
   return map;
 }
 
-/** 마감 후 이 기간(일)까지는 "마감" 탭에 남긴다. 지나면 목록 쿼리에서 제외한다(행은 보존) */
-const CLOSED_RETENTION_DAYS = 30;
-
 /**
- * 게시(published)되었거나 최근 마감(closed)된 공고를 유닛까지 조인해서 가져온다
- * (RLS가 published/closed만 노출하고, 여기서 오래된 closed를 추가로 걸러낸다).
- * 목록/대시보드/랜딩에서 쓴다.
+ * 접수 중인 공고만 유닛까지 조인해서 가져온다. 목록/대시보드/랜딩에서 쓴다.
+ *
+ * "공고가 나왔을 때부터 마감일까지만 보인다"가 원칙이다 — 마감된 공고는 사용자가 신청할
+ * 수 없으니 목록에서 빼고, 관리자 화면에서만 레거시로 조회한다(getAnnouncementsForAdmin).
+ * 행을 지우지는 않는다: 과거 공고는 경쟁률·추천 근거로 쓸 자산이다.
+ *
+ * 마감 판정은 status가 아니라 **apply_end로 직접** 한다. status='closed' 전환은
+ * 수집 스크립트가 돌 때만 일어나는데(autoCloseExpiredAnnouncements), 수집이 멈춰 있으면
+ * 마감된 공고가 published인 채로 남아 그대로 노출된다 — 실제로 66건이 그랬다.
+ * 날짜로 거르면 수집이 며칠 멈춰도 사용자에게 마감 공고가 새지 않는다.
  */
 export async function getAnnouncements(): Promise<Announcement[]> {
   const supabase = await createClient();
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - CLOSED_RETENTION_DAYS);
-  const cutoffIso = cutoff.toISOString().slice(0, 10);
+  // KST 기준 오늘. 서버가 UTC면 9시간 일찍 마감 처리되므로 시간대를 맞춘다.
+  const todayKst = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const [{ data: announcementRows, error: aErr }, { data: unitRows, error: uErr }] = await Promise.all([
     supabase
       .from("announcements")
       .select("*")
-      .in("status", ["published", "closed"])
-      .gte("apply_end", cutoffIso)
+      .eq("status", "published")
+      .gte("apply_end", todayKst)
       .order("apply_end", { ascending: true }),
     supabase.from("supply_units").select("*"),
   ]);
