@@ -12,7 +12,8 @@
     "lint": "eslint",
     "ingest:myhome": "tsx scripts/ingest-myhome.ts",
     "extract:conditions": "tsx scripts/extract-conditions.ts",
-    "grant-admin": "tsx scripts/grant-admin.ts"
+    "grant-admin": "tsx scripts/grant-admin.ts",
+    "approve:drafts": "tsx scripts/approve-drafts.ts"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
