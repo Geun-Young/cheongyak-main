@@ -23,6 +23,12 @@ export interface AiDraftSummary {
   applyEnd: string;
   /** 오늘(KST) 기준 남은 일수. 음수면 이미 마감된 공고(=지금 검수해도 아무도 못 본다) */
   daysLeft: number;
+  /** 시도(region)를 못 정한 공고. 조건 판정은 되지만 지역 필터·추천에서 빠진다 */
+  regionMissing: boolean;
+  /** 공급기관 코드를 못 정한 공고(지자체 개발공사 등). 기관 배지가 안 나온다 */
+  agencyUnknown: boolean;
+  /** "시도 시군구" 원문. 관리자가 지역을 채울 때 근거로 본다 */
+  district: string;
 }
 
 export interface AiDraftDetail extends AiDraftSummary {
@@ -42,7 +48,7 @@ export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("announcements")
-    .select("id, title, original_url, apply_end, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, apply_end, region, district, agency_code, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .in("ai_draft_status", ["extracted", "failed", "approved"])
     .order("apply_end", { ascending: true });
   if (error) throw error;
@@ -63,6 +69,9 @@ export async function getAiDraftQueue(): Promise<AiDraftSummary[]> {
     originalUrl: r.original_url,
     applyEnd: r.apply_end,
     daysLeft: Math.round((new Date(r.apply_end).getTime() - todayMs) / 86400000),
+    regionMissing: !r.region,
+    agencyUnknown: r.agency_code === "UNKNOWN",
+    district: r.district ?? "",
   }));
 }
 
@@ -71,7 +80,7 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
   const supabase = createAdminClient();
   const { data: a, error } = await supabase
     .from("announcements")
-    .select("id, title, original_url, apply_end, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
+    .select("id, title, original_url, apply_end, region, district, agency_code, ai_draft, ai_draft_status, ai_draft_confidence, ai_draft_notes, ai_draft_error, ai_draft_extracted_at, notice_pdf_url")
     .eq("id", announcementId)
     .maybeSingle();
   if (error) throw error;
@@ -99,6 +108,9 @@ export async function getAiDraftDetail(announcementId: string): Promise<AiDraftD
         new Date(new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)).getTime()) /
         86400000,
     ),
+    regionMissing: !a.region,
+    agencyUnknown: a.agency_code === "UNKNOWN",
+    district: a.district ?? "",
     aiDraft: a.ai_draft,
     supplyUnitIds: units ?? [],
   };

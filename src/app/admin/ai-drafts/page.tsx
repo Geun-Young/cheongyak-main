@@ -54,6 +54,10 @@ export default async function AiDraftsQueuePage() {
   // 지우지는 않는다(과거 공고는 경쟁률·추천 근거로 쓸 자산이고, 내용 확인도 가능해야 한다).
   const live = rest.filter((q) => q.daysLeft >= 0);
   const legacy = rest.filter((q) => q.daysLeft < 0);
+
+  // 지역·기관이 비어 있으면 조건 판정은 되더라도 지역 필터·추천에서 빠진다.
+  // 조건은 살리되(자동 승인 유지) 여기에 따로 모아 관리자가 채워 넣게 한다.
+  const needsMapping = live.filter((q) => q.regionMissing || q.agencyUnknown);
   const pending = live.filter((q) => q.aiDraftStatus === "extracted").length;
   const approved = live.filter((q) => q.aiDraftStatus === "approved").length;
   const urgent = live.filter((q) => q.aiDraftStatus === "extracted" && q.daysLeft <= 7).length;
@@ -107,6 +111,38 @@ export default async function AiDraftsQueuePage() {
                 </Card>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {needsMapping.length > 0 && (
+        <section className="mt-6">
+          <h2 className="text-lg font-bold text-ink">지역·기관 확인 필요 {needsMapping.length}건</h2>
+          <p className="mt-1 text-[13px] text-ink-2">
+            자격요건은 정상이라 판정에는 쓰이지만, 지역이나 기관이 비어 있어 <strong>지역 필터와 추천에서 빠져요.</strong>{" "}
+            공고 원문을 보고 채워 주세요.
+          </p>
+          <div className="mt-3 space-y-2">
+            {needsMapping.map((q) => (
+              <Card key={`map-${q.id}`} className="border-warn/40">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {q.regionMissing && <Chip size="sm" tone="warn">지역 없음</Chip>}
+                      {q.agencyUnknown && <Chip size="sm" tone="warn">기관 미분류</Chip>}
+                      <h3 className="font-semibold text-ink">{q.title}</h3>
+                    </div>
+                    <p className="mt-1 text-[12px] text-ink-3">{q.district || "주소 정보 없음"}</p>
+                  </div>
+                  <Link
+                    href={`/admin/announcements/new?id=${q.id}`}
+                    className="inline-flex h-9 shrink-0 items-center rounded-md bg-brand px-3 text-sm font-semibold text-white hover:bg-brand-deep"
+                  >
+                    채워 넣기
+                  </Link>
+                </div>
+              </Card>
+            ))}
           </div>
         </section>
       )}

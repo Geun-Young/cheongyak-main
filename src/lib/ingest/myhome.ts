@@ -83,9 +83,28 @@ const BRTC_TO_REGION: Record<string, Region> = {
   제주특별자치도: "제주",
 };
 
-/** 매핑 실패 시 "전국"으로 뭉개지 않는다 — 모두에게 잘못 노출되는 것보다 null로 큐에 남기는 게 낫다(설계서 5-2) */
-function toRegion(brtcNm: string): Region | null {
-  return BRTC_TO_REGION[brtcNm] ?? null;
+/**
+ * 광주·전남이 합쳐진 "전남광주통합특별시"는 우리 Region 둘(광주/전남)에 걸쳐 있어서
+ * 시도명만으로는 못 정한다. 시군구로 나눈다 — 구(광산구·서구·남구)는 광주,
+ * 시·군(목포시·나주시·순천시·무안군)은 전남이다.
+ * 이렇게 해야 사용자의 "내 지역" 필터와 통근 추천이 제대로 걸린다.
+ */
+function resolveMergedRegion(signguNm: string): Region | null {
+  const gu = signguNm.trim();
+  if (gu.endsWith("구")) return "광주";
+  if (gu.endsWith("시") || gu.endsWith("군")) return "전남";
+  return null;
+}
+
+/**
+ * 매핑 실패 시 "전국"으로 뭉개지 않는다 — 모두에게 잘못 노출되는 것보다 null로 큐에
+ * 남기는 게 낫다(설계서 5-2). signguNm은 시도명만으로 정할 수 없는 통합 행정구역에 쓴다.
+ */
+function toRegion(brtcNm: string, signguNm = ""): Region | null {
+  const direct = BRTC_TO_REGION[brtcNm];
+  if (direct) return direct;
+  if (brtcNm.includes("전남광주")) return resolveMergedRegion(signguNm);
+  return null;
 }
 
 /** 공급기관명 텍스트에서 코드를 추정한다. 매핑 실패 시 UNKNOWN으로 두고 관리자 큐로 보낸다(PRIVATE으로 단정하지 않는다) */
@@ -95,6 +114,8 @@ function toAgencyCode(suplyInsttNm: string): AgencyCode {
   if (suplyInsttNm.includes("GH") || suplyInsttNm.includes("경기주택")) return "GH";
   if (suplyInsttNm.includes("iH") || suplyInsttNm.includes("인천도시")) return "IH";
   if (suplyInsttNm.includes("부산도시")) return "BMC";
+  // 지자체 개발공사·도시공사는 공공기관이지만 우리 코드에 개별 항목이 없다.
+  // PRIVATE(민간)으로 단정하면 사용자에게 잘못된 정보가 가므로 UNKNOWN으로 둔다.
   return "UNKNOWN";
 }
 
@@ -268,7 +289,7 @@ function toIngestedAnnouncement(pblancId: string, group: MyHomeItem[]): Ingested
     : group.map((item, i) => toUnitByHouseSn(item, i, pblancId));
 
   const totalUnits = supplyUnits.reduce((s, u) => s + u.unitsCount, 0);
-  const region = toRegion(first.brtcNm);
+  const region = toRegion(first.brtcNm, first.signguNm);
   const housingType = supplyUnits[0]?.housingType ?? toHousingType(first.suplyTyNm);
 
   const announcementFields = {
