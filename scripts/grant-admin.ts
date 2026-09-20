@@ -9,6 +9,7 @@
  *   npm run grant-admin -- <user-id>           user id로 지정(카카오처럼 이메일이 없는 계정)
  *   npm run grant-admin -- <대상> --revoke     권한 해제
  */
+import "./lib/load-env";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;

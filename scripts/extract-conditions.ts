@@ -8,6 +8,7 @@
  *
  * 실행: npm run extract:conditions [-- --limit=10] [-- --id=myhome-21160]
  */
+import "./lib/load-env";
 import { createClient } from "@supabase/supabase-js";
 import { fetchNoticePdf } from "../src/lib/ingest/myhome-pdf";
 import { extractDraftFromPdf, GeminiQuotaExhaustedError } from "../src/lib/ingest/gemini-extract";

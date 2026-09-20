@@ -8,6 +8,7 @@
  *
  * 실행: DATA_GO_KR_API_KEY=... NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/ingest-myhome.ts
  */
+import "./lib/load-env";
 import { createClient } from "@supabase/supabase-js";
 import { fetchMyHomeAnnouncements, SOURCE } from "../src/lib/ingest/myhome";
 import { applyIngestedAnnouncements, autoCloseExpiredAnnouncements } from "./lib/ingest-upsert";
