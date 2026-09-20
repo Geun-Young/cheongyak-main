@@ -8,6 +8,7 @@
  */
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Condition, Field, Operator, ScoreBand } from "@/lib/types";
+import { normalizeDraft } from "./normalize-draft";
 
 const FIELD_ENUM: Field[] = [
   "age", "incomePct", "housingStatus", "noHousingMonths", "residenceRegion",
@@ -239,7 +240,12 @@ async function extractWithModel(
 
       const text = response.text;
       if (!text) throw new Error("Gemini가 빈 응답을 반환했어요.");
-      return JSON.parse(text) as ExtractionDraft;
+
+      // 응답 스키마가 value를 STRING으로만 받기 때문에(숫자·불리언·배열이 섞인 필드를
+      // JSON 스키마로 표현하기 어렵다) 여기서 한 번 정규화해 둔다. 이걸 빼먹으면
+      // numChildren eq "0" 같은 조건이 0 === "0" 으로 어긋나 자격 있는 사람이 탈락한다.
+      const raw = JSON.parse(text) as ExtractionDraft;
+      return normalizeDraft(raw).draft;
     } catch (e) {
       lastError = e;
       const message = e instanceof Error ? e.message : String(e);
