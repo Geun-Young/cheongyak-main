@@ -25,7 +25,7 @@
  * 반대로 여유 있는 사람에게는 교통 좋은 도심 단지를 그대로 추천한다.
  * 지역을 가로질러 비교하지 않는다 — 지역은 사용자가 이미 골랐다.
  */
-import { commonArea, parseRent, rentPerM2, type AreaInfo } from "./ingest/parse-area";
+import { parseRent, rentPerM2, type AreaInfo } from "./ingest/parse-area";
 import type {
   Announcement,
   Facts,
@@ -399,12 +399,14 @@ export function scoreUnit(
  * 다를 수 있어 신뢰도가 낮으므로 perM2: false로 표시해 점수 가중치를 낮춘다.
  * 금액을 모르거나 집들끼리 차이가 없으면 빈 Map — 비교 근거가 없다는 뜻이다.
  */
-function computeAffordability(
-  a: Announcement,
-  draftUnitNames: string[],
-): Map<string, UnitAffordability> {
+function computeAffordability(a: Announcement): Map<string, UnitAffordability> {
   const out = new Map<string, UnitAffordability>();
-  const area: AreaInfo | null = commonArea(draftUnitNames);
+  // 공고에 단일 면적이 저장돼 있을 때만 ㎡당 계산을 한다. 여러 평형이 섞였으면
+  // areaM2가 비어 있고(백필 때 판단), 그때는 금액을 그대로 비교한다.
+  const area: AreaInfo | null =
+    a.areaM2 !== undefined
+      ? { values: [a.areaM2], representative: a.areaM2, precise: true, label: a.areaLabel ?? `${a.areaM2}㎡` }
+      : null;
 
   // 월세 기준으로 먼저 모으고, 월세가 없는 공고(전세임대·매입임대)는 입주금으로 본다.
   const entries = a.supplyUnits.map((u) => {
@@ -452,11 +454,9 @@ export function recommendUnits(
   profile: Profile | null,
   /** unitId -> 인기도. 아직 수집 전이면 비워서 넘기면 된다(읍·면 판정으로 대체된다) */
   popularityByUnit: Map<string, UnitPopularity> = new Map(),
-  /** 면적 판단에 쓸 초안 유닛 이름들. 없으면 임대료 비교는 면적 없이 한다 */
-  draftUnitNames: string[] = [],
 ): AnnouncementRecommendation | null {
   const scored: UnitRecommendation[] = [];
-  const affordabilityByUnit = computeAffordability(a, draftUnitNames);
+  const affordabilityByUnit = computeAffordability(a);
 
   for (const unit of a.supplyUnits) {
     const match = unitResults.find((r) => r.unitId === unit.id);
@@ -524,21 +524,12 @@ export function recommendAcross(
   facts: Facts,
   profile: Profile | null,
   popularityByUnit: Map<string, UnitPopularity> = new Map(),
-  /** announcementId -> 초안 유닛 이름들. 면적 판단에 쓴다 */
-  draftNamesByAnnouncement: Map<string, string[]> = new Map(),
 ): AnnouncementRecommendation[] {
   const out: AnnouncementRecommendation[] = [];
   for (const a of items) {
     const summary = matches.get(a.id);
     if (!summary) continue;
-    const rec = recommendUnits(
-      a,
-      summary.unitResults,
-      facts,
-      profile,
-      popularityByUnit,
-      draftNamesByAnnouncement.get(a.id) ?? [],
-    );
+    const rec = recommendUnits(a, summary.unitResults, facts, profile, popularityByUnit);
     if (rec) out.push(rec);
   }
   return out.sort((x, y) => x.announcement.applyEnd.localeCompare(y.announcement.applyEnd));

@@ -147,6 +147,16 @@ export interface Announcement {
   summary: string[] | null;
   /** 수집기가 소스 필드로 조립한 자동 요약. summary가 채워지면 화면에선 무시된다 */
   autoSummary?: string[];
+  /**
+   * 전용면적 표기. 예) "39㎡", "26~46㎡".
+   * 공고문에서 뽑으므로 공고 단위다 — 유닛(단지)마다 평형이 다를 수 있어 유닛에 못 붙인다.
+   */
+  areaLabel?: string;
+  /**
+   * ㎡당 임대료 계산에 쓸 수 있는 단일 전용면적. 여러 평형이 섞인 공고는 undefined.
+   * 이게 없으면 임대료를 면적으로 못 나눠서 "싼 집"과 "작은 집"을 구분할 수 없다.
+   */
+  areaM2?: number;
   announcedAt: string;
   applyStart: string;
   applyEnd: string;

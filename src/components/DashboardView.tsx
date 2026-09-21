@@ -5,7 +5,9 @@ import type { Announcement } from "@/lib/types";
 import { DEMO_PROFILE, deriveFacts, useProfile } from "@/lib/profile";
 import { countByStatus, matchAll } from "@/lib/matching";
 import { relativeTime } from "@/lib/format";
+import { filterByDesiredRegions, recommendAcross } from "@/lib/recommend";
 import { AnnouncementList, isUrgent, type ListTab } from "./AnnouncementList";
+import { RecommendPanel } from "./RecommendPanel";
 import { SummaryTiles, type SummaryKey } from "./SummaryTiles";
 import { ButtonLink, Container } from "./ui";
 
@@ -13,6 +15,8 @@ export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; 
   const { profile, isLoggedIn } = useProfile();
   const p = profile ?? DEMO_PROFILE;
   const [tab, setTab] = useState<ListTab>("all");
+  // 사용자가 고른 지역만 볼지, 전체를 볼지. 기본은 고른 지역이다.
+  const [showAllRegions, setShowAllRegions] = useState(false);
 
   const { results, counts } = useMemo(() => {
     const facts = deriveFacts(p);
@@ -21,6 +25,19 @@ export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; 
     const urgent = items.filter((a) => isUrgent(a, results.get(a.id))).length;
     return { results, counts: { ...base, urgent } as Record<SummaryKey, number> };
   }, [p, items]);
+
+  /**
+   * 추천은 "고른 지역 안에서, 공고마다 어느 집이 나에게 맞는지"를 보여준다.
+   * 판정(results)과 달리 자격이 되는 집만 들어가고, 마감 임박 순으로 정렬된다.
+   */
+  const { recommendations, regionFiltered } = useMemo(() => {
+    const facts = deriveFacts(p);
+    const scoped = filterByDesiredRegions(items, p.desiredRegions, showAllRegions);
+    return {
+      recommendations: recommendAcross(scoped, results, facts, p).slice(0, 6),
+      regionFiltered: !showAllRegions && (p.desiredRegions?.length ?? 0) > 0,
+    };
+  }, [p, items, results, showAllRegions]);
 
   const needsOnboarding = isLoggedIn && !p.onboardingDone;
 
@@ -66,7 +83,36 @@ export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; 
         <p className="mt-4 text-[13px] text-ink-3">마지막 갱신 {relativeTime(lastSyncedAt)}</p>
       )}
 
-      <div className="mt-6">
+      <section className="mt-8">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-[18px] font-bold text-ink">
+              {p.name || "회원"}님께 추천하는 집
+            </h2>
+            <p className="mt-0.5 text-[13px] text-ink-2">
+              {regionFiltered
+                ? `관심 지역(${(p.desiredRegions ?? []).join("·")}) 안에서 골랐어요.`
+                : "전체 지역에서 골랐어요."}
+            </p>
+          </div>
+          {(p.desiredRegions?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllRegions((v) => !v)}
+              className="h-9 shrink-0 rounded-md border border-line-strong bg-surface px-3 text-[13px] font-semibold text-ink-2 hover:border-brand hover:text-brand"
+            >
+              {showAllRegions ? "관심 지역만 보기" : "전체 지역 보기"}
+            </button>
+          )}
+        </div>
+        <RecommendPanel
+          recommendations={recommendations}
+          regionFiltered={regionFiltered}
+          onShowAll={() => setShowAllRegions(true)}
+        />
+      </section>
+
+      <div className="mt-8">
         <AnnouncementList
           items={items}
           results={results}

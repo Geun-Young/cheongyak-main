@@ -28,6 +28,8 @@ interface AnnouncementRow {
   ranking_method: Announcement["rankingMethod"];
   review_status: Announcement["reviewStatus"];
   status: Announcement["status"];
+  area_label: string | null;
+  area_m2: number | null;
   source: Announcement["source"] | null;
   source_id: string | null;
   request_count: number;
@@ -93,6 +95,8 @@ function toAnnouncement(row: AnnouncementRow, unitRows: SupplyUnitRow[]): Announ
     rankingMethod: row.ranking_method,
     reviewStatus: row.review_status,
     status: row.status,
+    areaLabel: row.area_label ?? undefined,
+    areaM2: row.area_m2 ?? undefined,
     // 소스에서 사라진(active=false) 유닛은 사용자 화면에서 제외한다. 관리자 화면은
     // getAnnouncementsForAdmin/getAnnouncementByIdForAdmin에서 전부(비활성 포함) 보여준다.
     supplyUnits: unitRows.filter((u) => u.active).map(toUnit),

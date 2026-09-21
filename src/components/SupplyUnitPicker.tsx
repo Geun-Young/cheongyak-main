@@ -5,7 +5,8 @@ import { CircleDashed } from "lucide-react";
 import type { Announcement, EligibilityStatus, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
-import { matchUnit } from "@/lib/matching";
+import { matchAnnouncement, matchUnit } from "@/lib/matching";
+import { recommendUnits } from "@/lib/recommend";
 import { MatchPanel } from "./MatchPanel";
 import { UnitLocationCard } from "./UnitLocationCard";
 import { Card, cx } from "./ui";
@@ -30,6 +31,25 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
 
   const unit: SupplyUnit = a.supplyUnits.find((u) => u.id === selectedId) ?? a.supplyUnits[0];
   const showTabs = a.supplyUnits.length > 1;
+
+  /**
+   * 집이 여러 개일 때 "어디에 넣어야 하나"를 알려준다. 탭만 나열하면 사용자는
+   * 13개 중 무엇을 눌러야 할지 모른다 — 추천 순서와 한줄평을 함께 보여준다.
+   */
+  const recommendation = useMemo(() => {
+    if (!facts || !showTabs) return null;
+    return recommendUnits(a, matchAnnouncement(a, facts).unitResults, facts, p ?? null);
+  }, [a, facts, p, showTabs]);
+
+  const recByUnit = useMemo(() => {
+    const m = new Map<string, { rank: number; score: number; headline: string }>();
+    recommendation?.ranked.forEach((r, i) => {
+      m.set(r.unitId, { rank: i, score: r.score, headline: r.headline });
+    });
+    return m;
+  }, [recommendation]);
+
+  const selectedRec = recByUnit.get(unit.id);
 
   return (
     <div className="space-y-5">
@@ -58,9 +78,22 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
                     />
                   )}
                   <span className="min-w-0">
-                    <span className="block">{u.name}</span>
+                    <span className="block">
+                      {u.name}
+                      {recByUnit.get(u.id)?.rank === 0 && (
+                        <span
+                          className={cx(
+                            "ml-1.5 rounded px-1 py-0.5 text-[11px] font-bold",
+                            active ? "bg-white/25 text-white" : "bg-brand text-white",
+                          )}
+                        >
+                          추천
+                        </span>
+                      )}
+                    </span>
                     <span className={cx("block text-[12px] font-normal tnum", active ? "text-white/80" : "text-ink-3")}>
                       {u.unitsCount.toLocaleString("ko-KR")}세대
+                      {recByUnit.has(u.id) && ` · ${recByUnit.get(u.id)!.score}점`}
                     </span>
                   </span>
                 </button>
@@ -80,6 +113,36 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {selectedRec && recommendation && (
+        <Card className="border-brand/30 bg-brand-tint">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-bold text-ink">
+              {selectedRec.rank === 0
+                ? "이 공고에서 가장 추천하는 집이에요"
+                : `추천 ${selectedRec.rank + 1}위 (전체 ${recommendation.ranked.length}개 중)`}
+            </h3>
+            <span className="tnum text-[13px] font-bold text-brand">{selectedRec.score}점</span>
+          </div>
+          <p className="mt-1 text-[15px] font-semibold text-brand-deep">{selectedRec.headline}</p>
+          {(() => {
+            const full = recommendation.ranked.find((r) => r.unitId === unit.id);
+            if (!full || full.reasons.length === 0) return null;
+            return (
+              <ul className="mt-2 space-y-0.5">
+                {full.reasons.map((r) => (
+                  <li key={r} className="text-[13px] leading-relaxed text-ink-2">
+                    · {r}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+          <p className="mt-2 text-[12px] text-ink-3">
+            같은 공고 안의 집끼리만 비교한 점수예요. 다른 공고와는 비교하지 마세요.
+          </p>
         </Card>
       )}
 
