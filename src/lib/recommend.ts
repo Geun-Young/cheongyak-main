@@ -36,6 +36,16 @@ import type {
 
 export type Competitiveness = "comfortable" | "tight" | "stretch";
 
+/**
+ * 단지별 인기도(네이버 블로그·카페 글 수 기반). unit_popularity 테이블에서 읽어 넘긴다.
+ * relative는 **같은 공고 안에서** 0~1로 정규화된 값이다 — 절대 글 수는 지역 규모에
+ * 좌우되므로(서울 단지가 지방보다 무조건 많다) 공고 안 상대 위치만 의미가 있다.
+ */
+export interface UnitPopularity {
+  totalCount: number;
+  relative: number;
+}
+
 /** 교통 편의 점수. 좌표가 없으면 계산할 수 없어 known: false가 된다 */
 export interface TransitScore {
   /** 0(나쁨) ~ 1(좋음). known이 false면 중립 추정치다 */
@@ -56,6 +66,8 @@ export interface UnitRecommendation {
   /** 이 집이 해당 시군구 기준 외곽인지. "3순위면 외곽" 설명에 쓴다 */
   isOutskirt: boolean;
   transit: TransitScore;
+  /** 인기도를 알 수 있었으면 그 값. 모르면 null(수집 전이거나 집이 하나뿐인 공고) */
+  popularity: UnitPopularity | null;
 }
 
 /** 공고 하나에 대한 추천 결과. 집이 하나뿐이면 ranked 길이도 1이다 */
@@ -177,11 +189,19 @@ function buildHeadline(
     tierRank: number | undefined;
     scale: number;
     score: number;
+    popularity: UnitPopularity | null;
   },
   isOnlyUnit: boolean,
 ): string {
-  const { competitiveness, isOutskirt, transit, tierRank, scale, score } = rec;
+  const { competitiveness, isOutskirt, transit, tierRank, scale, score, popularity } = rec;
 
+  // 인기도를 알면 그걸로 말한다 — 읍·면 여부보다 훨씬 구체적인 근거다.
+  if (popularity && competitiveness !== "comfortable" && popularity.relative <= 0.3 && score >= 50) {
+    return "덜 알려졌지만 그래서 가능성이 높은 집!";
+  }
+  if (popularity && competitiveness === "comfortable" && popularity.relative >= 0.7) {
+    return "인기 많은 단지인데 조건이 되는 집!";
+  }
   if (isOutskirt && competitiveness !== "comfortable" && score >= 55) {
     return "멀긴 해도 가능성이 높은 집!";
   }
@@ -205,6 +225,7 @@ export function scoreUnit(
   match: MatchResult,
   facts: Facts,
   profile: Profile | null,
+  popularity: UnitPopularity | null = null,
 ): Omit<UnitRecommendation, "unit" | "headline"> & { scale: number; tierRank: number | undefined } | null {
   if (match.status !== "eligible") return null;
 
@@ -267,14 +288,32 @@ export function scoreUnit(
   }
 
   /**
-   * 3) 처지에 따른 외곽 보정 — "3순위면 외곽" 규칙.
-   * 조건이 빠듯하거나 순위가 낮으면 도심 단지에서 밀리므로, 같은 공고 안에서
-   * 외곽 단지를 끌어올리고 도심 단지를 내린다. 여유 있는 사람에겐 반대로 한다.
+   * 3) 처지에 따른 경쟁 보정 — "3순위면 외곽" 규칙이 여기서 동작한다.
+   *
+   * 인기도(네이버 블로그·카페 글 수)를 경쟁률 대리지표로 쓴다. 사람들이 많이 이야기하는
+   * 단지는 지원자도 몰린다. 방향은 사용자 처지에 따라 **반대**다:
+   *   - 조건이 빠듯하면(stretch) 인기 단지에서 밀리므로 내리고 한산한 단지를 올린다.
+   *   - 여유 있으면(comfortable) 인기 단지도 해볼 만하니 오히려 올린다.
+   *
+   * 인기도를 아직 모르면(수집 전) 읍·면 여부로 대신한다 — 거칠지만 없는 것보다 낫다.
    */
   // 100점 만점으로 환산한 뒤 보정을 얹는다 — 보정은 환산값 기준의 가감점이다.
   let finalScore = maxScore > 0 ? (score / maxScore) * 100 : 50;
 
-  if (competitiveness === "stretch") {
+  if (popularity) {
+    // relative 0.5를 기준으로 얼마나 벗어났는지 × 처지가 정하는 가중치.
+    const deviation = popularity.relative - 0.5;
+    const weight = competitiveness === "stretch" ? -28 : competitiveness === "tight" ? -14 : 10;
+    finalScore += deviation * weight;
+
+    if (competitiveness !== "comfortable" && popularity.relative <= 0.3) {
+      reasons.push("관심이 덜 몰린 단지라 경쟁이 약할 수 있어요");
+    } else if (competitiveness !== "comfortable" && popularity.relative >= 0.7) {
+      reasons.push("인기가 많은 단지라 경쟁이 치열할 수 있어요");
+    } else if (competitiveness === "comfortable" && popularity.relative >= 0.7) {
+      reasons.push("사람들이 많이 찾는 단지예요");
+    }
+  } else if (competitiveness === "stretch") {
     finalScore += isOutskirt ? 12 : -8;
     if (isOutskirt) reasons.push("경쟁이 덜한 외곽이라 가능성이 올라가요");
   } else if (competitiveness === "tight") {
@@ -292,6 +331,7 @@ export function scoreUnit(
     competitiveness,
     isOutskirt,
     transit,
+    popularity,
     scale,
     tierRank,
   };
@@ -306,13 +346,15 @@ export function recommendUnits(
   unitResults: MatchResult[],
   facts: Facts,
   profile: Profile | null,
+  /** unitId -> 인기도. 아직 수집 전이면 비워서 넘기면 된다(읍·면 판정으로 대체된다) */
+  popularityByUnit: Map<string, UnitPopularity> = new Map(),
 ): AnnouncementRecommendation | null {
   const scored: UnitRecommendation[] = [];
 
   for (const unit of a.supplyUnits) {
     const match = unitResults.find((r) => r.unitId === unit.id);
     if (!match) continue;
-    const s = scoreUnit(unit, match, facts, profile);
+    const s = scoreUnit(unit, match, facts, profile, popularityByUnit.get(unit.id) ?? null);
     if (!s) continue;
     const { scale, tierRank, ...rest } = s;
     scored.push({
@@ -326,6 +368,7 @@ export function recommendUnits(
           tierRank,
           scale,
           score: rest.score,
+          popularity: rest.popularity,
         },
         a.supplyUnits.length === 1,
       ),
@@ -365,12 +408,13 @@ export function recommendAcross(
   matches: Map<string, { unitResults: MatchResult[] }>,
   facts: Facts,
   profile: Profile | null,
+  popularityByUnit: Map<string, UnitPopularity> = new Map(),
 ): AnnouncementRecommendation[] {
   const out: AnnouncementRecommendation[] = [];
   for (const a of items) {
     const summary = matches.get(a.id);
     if (!summary) continue;
-    const rec = recommendUnits(a, summary.unitResults, facts, profile);
+    const rec = recommendUnits(a, summary.unitResults, facts, profile, popularityByUnit);
     if (rec) out.push(rec);
   }
   return out.sort((x, y) => x.announcement.applyEnd.localeCompare(y.announcement.applyEnd));
