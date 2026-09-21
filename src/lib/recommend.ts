@@ -25,6 +25,7 @@
  * 반대로 여유 있는 사람에게는 교통 좋은 도심 단지를 그대로 추천한다.
  * 지역을 가로질러 비교하지 않는다 — 지역은 사용자가 이미 골랐다.
  */
+import { commonArea, parseRent, rentPerM2, type AreaInfo } from "./ingest/parse-area";
 import type {
   Announcement,
   Facts,
@@ -44,6 +45,21 @@ export type Competitiveness = "comfortable" | "tight" | "stretch";
 export interface UnitPopularity {
   totalCount: number;
   relative: number;
+}
+
+/**
+ * 같은 공고 안에서 이 집이 상대적으로 얼마나 저렴한지(0=가장 비쌈, 1=가장 쌈).
+ *
+ * 싼 집에 사람이 몰린다 — 그래서 인기도와 같은 축의 신호이고, 방향도 같게 쓴다.
+ * perM2가 true면 면적으로 나눈 값이라 "작아서 싼 집"과 "정말 저렴한 집"이 구분된다.
+ * false면 면적을 몰라 월세(또는 입주금)를 그대로 비교한 것이므로, 같은 평형끼리가
+ * 아닐 수 있다는 뜻이다 — 이때는 근거 문구를 조심스럽게 쓴다.
+ */
+export interface UnitAffordability {
+  relative: number;
+  perM2: boolean;
+  /** 사용자에게 보여줄 금액 표기. 예) "월 8만원", "㎡당 2,016원" */
+  label: string;
 }
 
 /** 교통 편의 점수. 좌표가 없으면 계산할 수 없어 known: false가 된다 */
@@ -68,6 +84,8 @@ export interface UnitRecommendation {
   transit: TransitScore;
   /** 인기도를 알 수 있었으면 그 값. 모르면 null(수집 전이거나 집이 하나뿐인 공고) */
   popularity: UnitPopularity | null;
+  /** 임대료 비교 결과. 임대료를 모르거나 공고 안에서 차이가 없으면 null */
+  affordability: UnitAffordability | null;
 }
 
 /** 공고 하나에 대한 추천 결과. 집이 하나뿐이면 ranked 길이도 1이다 */
@@ -190,10 +208,16 @@ function buildHeadline(
     scale: number;
     score: number;
     popularity: UnitPopularity | null;
+    affordability: UnitAffordability | null;
   },
   isOnlyUnit: boolean,
 ): string {
-  const { competitiveness, isOutskirt, transit, tierRank, scale, score, popularity } = rec;
+  const { competitiveness, isOutskirt, transit, tierRank, scale, score, popularity, affordability } = rec;
+
+  // 면적까지 감안해 저렴한 건 강한 장점이라 먼저 말한다.
+  if (affordability?.perM2 && affordability.relative >= 0.75) {
+    return "같은 평형인데 임대료가 싼 집!";
+  }
 
   // 인기도를 알면 그걸로 말한다 — 읍·면 여부보다 훨씬 구체적인 근거다.
   if (popularity && competitiveness !== "comfortable" && popularity.relative <= 0.3 && score >= 50) {
@@ -226,6 +250,7 @@ export function scoreUnit(
   facts: Facts,
   profile: Profile | null,
   popularity: UnitPopularity | null = null,
+  affordability: UnitAffordability | null = null,
 ): Omit<UnitRecommendation, "unit" | "headline"> & { scale: number; tierRank: number | undefined } | null {
   if (match.status !== "eligible") return null;
 
@@ -324,6 +349,31 @@ export function scoreUnit(
     finalScore -= 2;
   }
 
+  /**
+   * 4) 임대료 — 실제로 매달 내야 하는 돈이라 사용자에게 직접적인 영향이 크다.
+   * 다른 신호(세대수·순위)가 만드는 점수차가 10점을 넘는 경우가 많아, 이보다 작게 잡으면
+   * 임대료가 아무리 차이 나도 순서를 못 바꾼다 — 실제로 ±1점으로는 전혀 안 움직였다.
+   *
+   * 조건이 빠듯한 사람일수록 월세 부담이 더 크게 다가오므로 가중치도 그만큼 높인다.
+   * 면적을 모르고 비교한 값(perM2=false)은 평형이 다를 수 있어 가중치를 절반으로 낮춘다.
+   */
+  if (affordability) {
+    const trust = affordability.perM2 ? 1 : 0.5;
+    const deviation = affordability.relative - 0.5;
+    const weight = competitiveness === "stretch" ? 40 : competitiveness === "tight" ? 30 : 18;
+    finalScore += deviation * weight * trust;
+
+    if (affordability.relative >= 0.7) {
+      reasons.push(
+        affordability.perM2
+          ? `면적 대비 임대료가 저렴해요 (${affordability.label})`
+          : `이 공고에서 임대료가 낮은 편이에요 (${affordability.label})`,
+      );
+    } else if (affordability.relative <= 0.3) {
+      reasons.push(`임대료가 높은 편이에요 (${affordability.label})`);
+    }
+  }
+
   return {
     unitId: unit.id,
     score: Math.max(0, Math.min(100, Math.round(finalScore))),
@@ -332,6 +382,7 @@ export function scoreUnit(
     isOutskirt,
     transit,
     popularity,
+    affordability,
     scale,
     tierRank,
   };
@@ -341,6 +392,59 @@ export function scoreUnit(
  * 공고 하나 안에서 집들을 점수순으로 정렬한다.
  * 자격이 되는 집이 하나도 없으면 null.
  */
+/**
+ * 같은 공고 안의 집들을 임대료로 비교한다.
+ *
+ * 면적을 알면 ㎡당 월세로, 모르면 월세(없으면 입주금)를 그대로 쓴다. 후자는 평형이
+ * 다를 수 있어 신뢰도가 낮으므로 perM2: false로 표시해 점수 가중치를 낮춘다.
+ * 금액을 모르거나 집들끼리 차이가 없으면 빈 Map — 비교 근거가 없다는 뜻이다.
+ */
+function computeAffordability(
+  a: Announcement,
+  draftUnitNames: string[],
+): Map<string, UnitAffordability> {
+  const out = new Map<string, UnitAffordability>();
+  const area: AreaInfo | null = commonArea(draftUnitNames);
+
+  // 월세 기준으로 먼저 모으고, 월세가 없는 공고(전세임대·매입임대)는 입주금으로 본다.
+  const entries = a.supplyUnits.map((u) => {
+    const rent = parseRent(u.rentNote);
+    const perM2 = rentPerM2(rent, area);
+    return { unit: u, rent, perM2 };
+  });
+
+  const usePerM2 = entries.filter((e) => e.perM2 !== null).length >= 2;
+  const useMonthly = !usePerM2 && entries.filter((e) => e.rent.monthly !== null).length >= 2;
+  const useEntry =
+    !usePerM2 && !useMonthly && entries.filter((e) => e.rent.entry !== null).length >= 2;
+  if (!usePerM2 && !useMonthly && !useEntry) return out;
+
+  const valueOf = (e: (typeof entries)[number]): number | null =>
+    usePerM2 ? e.perM2 : useMonthly ? e.rent.monthly : e.rent.entry;
+
+  const withValue = entries
+    .map((e) => ({ e, v: valueOf(e) }))
+    .filter((x): x is { e: (typeof entries)[number]; v: number } => x.v !== null);
+
+  const values = withValue.map((x) => x.v);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // 전부 같으면 비교할 게 없다 — 근거 없는 가감점을 주지 않는다.
+  if (max - min < min * 0.02) return out;
+
+  for (const { e, v } of withValue) {
+    // 싼 쪽이 1에 가깝도록 뒤집는다.
+    const relative = 1 - (v - min) / (max - min);
+    const label = usePerM2
+      ? `㎡당 ${Math.round(v).toLocaleString()}원`
+      : useMonthly
+        ? `월 ${Math.round(v / 10000)}만원`
+        : `입주금 ${Math.round(v / 10000)}만원`;
+    out.set(e.unit.id, { relative, perM2: usePerM2, label });
+  }
+  return out;
+}
+
 export function recommendUnits(
   a: Announcement,
   unitResults: MatchResult[],
@@ -348,13 +452,23 @@ export function recommendUnits(
   profile: Profile | null,
   /** unitId -> 인기도. 아직 수집 전이면 비워서 넘기면 된다(읍·면 판정으로 대체된다) */
   popularityByUnit: Map<string, UnitPopularity> = new Map(),
+  /** 면적 판단에 쓸 초안 유닛 이름들. 없으면 임대료 비교는 면적 없이 한다 */
+  draftUnitNames: string[] = [],
 ): AnnouncementRecommendation | null {
   const scored: UnitRecommendation[] = [];
+  const affordabilityByUnit = computeAffordability(a, draftUnitNames);
 
   for (const unit of a.supplyUnits) {
     const match = unitResults.find((r) => r.unitId === unit.id);
     if (!match) continue;
-    const s = scoreUnit(unit, match, facts, profile, popularityByUnit.get(unit.id) ?? null);
+    const s = scoreUnit(
+      unit,
+      match,
+      facts,
+      profile,
+      popularityByUnit.get(unit.id) ?? null,
+      affordabilityByUnit.get(unit.id) ?? null,
+    );
     if (!s) continue;
     const { scale, tierRank, ...rest } = s;
     scored.push({
@@ -369,6 +483,7 @@ export function recommendUnits(
           scale,
           score: rest.score,
           popularity: rest.popularity,
+          affordability: rest.affordability,
         },
         a.supplyUnits.length === 1,
       ),
@@ -409,12 +524,21 @@ export function recommendAcross(
   facts: Facts,
   profile: Profile | null,
   popularityByUnit: Map<string, UnitPopularity> = new Map(),
+  /** announcementId -> 초안 유닛 이름들. 면적 판단에 쓴다 */
+  draftNamesByAnnouncement: Map<string, string[]> = new Map(),
 ): AnnouncementRecommendation[] {
   const out: AnnouncementRecommendation[] = [];
   for (const a of items) {
     const summary = matches.get(a.id);
     if (!summary) continue;
-    const rec = recommendUnits(a, summary.unitResults, facts, profile, popularityByUnit);
+    const rec = recommendUnits(
+      a,
+      summary.unitResults,
+      facts,
+      profile,
+      popularityByUnit,
+      draftNamesByAnnouncement.get(a.id) ?? [],
+    );
     if (rec) out.push(rec);
   }
   return out.sort((x, y) => x.announcement.applyEnd.localeCompare(y.announcement.applyEnd));
