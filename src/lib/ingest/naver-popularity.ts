@@ -23,13 +23,22 @@
  * - 그래서 절대값을 쓰지 않고 **공고 안 상대 순위**로만 쓴다.
  */
 
-const BLOG_ENDPOINT = "https://openapi.naver.com/v1/search/blog.json";
-const CAFE_ENDPOINT = "https://openapi.naver.com/v1/search/cafearticle.json";
+/**
+ * NAVER API HUB(네이버 클라우드 플랫폼) 엔드포인트.
+ *
+ * 구 개발자센터(openapi.naver.com)는 **2026-07-31부로 신규 신청이 막혔고** 2027-06-30에
+ * 완전히 종료된다. 지금 새로 키를 받으려면 NCP 경로밖에 없어서 처음부터 이쪽으로 짰다.
+ * 인증 헤더도 바뀌었다: X-Naver-Client-Id/Secret → X-NCP-APIGW-API-KEY-ID/KEY.
+ */
+const HUB_BASE = "https://naverapihub.apigw.ntruss.com";
+const BLOG_ENDPOINT = `${HUB_BASE}/search/v1/blog`;
+const CAFE_ENDPOINT = `${HUB_BASE}/search/v1/cafearticle`;
 
 export class NaverCredentialsMissingError extends Error {
   constructor() {
     super(
-      "네이버 검색 API 키가 없어요. .env.local에 NAVER_CLIENT_ID / NAVER_CLIENT_SECRET을 넣어주세요.",
+      "네이버 API HUB 키가 없어요. NCP 콘솔에서 발급받아 .env.local에 " +
+        "NAVER_API_KEY_ID / NAVER_API_KEY를 넣어주세요.",
     );
     this.name = "NaverCredentialsMissingError";
   }
@@ -69,14 +78,14 @@ export function buildQuery(unitName: string, address: string | undefined): strin
 async function searchCount(
   endpoint: string,
   query: string,
-  clientId: string,
-  clientSecret: string,
+  keyId: string,
+  key: string,
 ): Promise<number> {
   const url = `${endpoint}?query=${encodeURIComponent(query)}&display=1`;
   const res = await fetch(url, {
     headers: {
-      "X-Naver-Client-Id": clientId,
-      "X-Naver-Client-Secret": clientSecret,
+      "X-NCP-APIGW-API-KEY-ID": keyId,
+      "X-NCP-APIGW-API-KEY": key,
     },
   });
 
@@ -85,8 +94,29 @@ async function searchCount(
     throw new Error(`네이버 검색 실패 (${res.status}): ${body.slice(0, 200)}`);
   }
 
-  const json = (await res.json()) as { total?: number };
-  return typeof json.total === "number" ? json.total : 0;
+  /**
+   * 이관 후 응답 구조가 "대체로 유지"라고만 안내돼 있어서, total의 위치를 단정하지 않는다.
+   * 최상위에 없으면 한 겹 감싼 형태(예: { result: { total } })도 살펴본다.
+   * 그래도 못 찾으면 0이 아니라 에러를 낸다 — 0으로 조용히 넘어가면 모든 단지가 0건이 되어
+   * "인기도 차이 없음"으로 보이고, 원인을 찾기 어려워진다.
+   */
+  const json = (await res.json()) as Record<string, unknown>;
+  const total = findTotal(json);
+  if (total === null) {
+    throw new Error(`응답에서 total을 못 찾았어요: ${JSON.stringify(json).slice(0, 200)}`);
+  }
+  return total;
+}
+
+/** 최상위 또는 한 겹 안쪽에서 total 숫자를 찾는다 */
+function findTotal(json: Record<string, unknown>): number | null {
+  if (typeof json.total === "number") return json.total;
+  for (const v of Object.values(json)) {
+    if (v && typeof v === "object" && typeof (v as { total?: unknown }).total === "number") {
+      return (v as { total: number }).total;
+    }
+  }
+  return null;
 }
 
 /**
@@ -97,15 +127,15 @@ export async function fetchPopularity(
   unitName: string,
   address: string | undefined,
 ): Promise<PopularityResult> {
-  const clientId = process.env.NAVER_CLIENT_ID;
-  const clientSecret = process.env.NAVER_CLIENT_SECRET;
-  if (!clientId || !clientSecret) throw new NaverCredentialsMissingError();
+  const keyId = process.env.NAVER_API_KEY_ID;
+  const key = process.env.NAVER_API_KEY;
+  if (!keyId || !key) throw new NaverCredentialsMissingError();
 
   const query = buildQuery(unitName, address);
 
   const [blogCount, cafeCount] = await Promise.all([
-    searchCount(BLOG_ENDPOINT, query, clientId, clientSecret),
-    searchCount(CAFE_ENDPOINT, query, clientId, clientSecret),
+    searchCount(BLOG_ENDPOINT, query, keyId, key),
+    searchCount(CAFE_ENDPOINT, query, keyId, key),
   ]);
 
   const totalCount = blogCount + cafeCount;
