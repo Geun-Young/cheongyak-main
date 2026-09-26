@@ -13,9 +13,9 @@
   - Supabase 대시보드에서 google·kakao·email provider를 **모두 켰고**, 지금 **실제로 쓸 수 있는 건 구글과 이메일**이다. **카카오는 KOE205로 막혀서 버튼을 감춰뒀다**(17번) — 비즈앱 전환을 하면 `NEXT_PUBLIC_ENABLE_KAKAO_LOGIN=true` 한 줄로 되살아난다.
   - 프로필·관심공고는 로그인 사용자는 DB(RLS로 본인 것만), 비로그인은 localStorage에 저장된다. `/me`·`/onboarding`·`/admin/*`은 proxy 단계에서 차단.
 - **데이터**: 마이홈포털 공공데이터 API에서 가져온 **실제 공고 129건**이 DB에 있다. 이 중 **접수 중 63건만 사용자에게 보이고, 마감된 66건은 레거시로 관리자에게만 보인다**(18번).
-- **공고 갱신은 `npm run daily:update`(수집 → 조건 추출 → 자동 승인) 한 줄**이고, 지금은 이 PC의 Windows 작업 스케줄러가 매일 09:00·18:00에 돌린다(25번, 작업 이름 `cheongyak-daily-update`, 로그 `logs/`). PC가 꺼져 있으면 안 돈다.
-  - **PC 없이 도는 GitHub Actions 버전을 코드까지 만들어 뒀다**(26번) — 마이홈포털의 해외 IP 차단은 서울 리전 Supabase Edge Function(`kr-relay`) 중계로 푼다. **남은 건 사용자 계정으로만 할 수 있는 설정 3가지**(중계기 배포, GitHub 비밀값 `GEMINI_API_KEY`, 첫 실행 확인)이고, 확인되면 PC 작업은 끈다.
-  - 관리자 화면 `/admin/announcements` 맨 위에 **"지금 업데이트" 버튼**이 있다(GitHub 토큰이 있으면 GitHub Actions, 없으면 이 PC에서 실행).
+- **공고 갱신은 GitHub Actions가 매일 KST 09:17·18:17에 돌린다 — PC가 꺼져 있어도 된다**(26번). 명령은 `npm run daily:update`(수집 → 조건 추출 → 자동 승인) 한 줄이고, 한국 사이트 요청은 서울 리전 Supabase Edge Function(`kr-relay`)을 거친다. 실행 기록은 GitHub 저장소 Actions 탭(로그 아티팩트 14일).
+  - 이 PC의 Windows 작업 `cheongyak-daily-update`(25번)는 **꺼 두었다**(둘 다 돌면 같은 공고를 두 번 추출). GitHub 쪽이 막히면 `Enable-ScheduledTask -TaskName cheongyak-daily-update`로 되살린다.
+  - 관리자 화면 `/admin/announcements` 맨 위에 **"지금 업데이트" 버튼**이 있다. 지금은 `GITHUB_ACTIONS_TOKEN`이 없어서 이 PC에서 실행된다(토큰을 넣으면 GitHub Actions를 실행).
 - **PDF→LLM 조건 추출 + 자동 승인 완료**(9·14·19번) — 129건 중 126건(98%) 추출. 사람이 전건 검수하는 대신 **스키마 검증을 통과한 111건을 자동 반영**했고(유닛 172개), 접수 중인 공고 기준 **판정 가능 57건**이다. 사람이 볼 건 접수중 기준 5건뿐.
 - **기타 조건(스키마로 표현 못 하는 자격 조건)이 사용자 화면까지 연결됨**(15번) — 관리자가 초안을 승인하면 공고 상세의 "직접 확인이 필요한 조건" 카드로 보인다.
 - **"어떤 유닛에 넣을지" 추천 기능을 설계 중**(11번 단계) — 자격 여부뿐 아니라 통근시간·당첨 가능성까지 반영한 추천 점수 + 한줄평. `Profile.commuteFrom`/`commuteTo` 타입만 먼저 추가된 상태, 실제 추천 로직은 인증 붙는 시점에 이어서.
@@ -145,6 +145,8 @@ Next.js 16 + React 19 + Tailwind v4로 만든 **UI 껍데기(목업)**. 공고 1
 **실행 검증**: 기존 mock 129건(구 로직, status=draft)을 삭제하고 새 로직으로 재수집 → **129건 전부 신규 insert, status=published**로 들어감. anon key로 조회 시 이전엔 0건이었던 게 이제 **129건 전체가 보임**을 직접 확인 — 이게 이번 재설계의 핵심 목표("관리자 개입 없이 목록 갱신")가 실제로 달성됐다는 증거. 재수집(idempotency, unchanged 카운트) 검증은 이 세션 중 공공데이터포털 API가 여러 차례 불안정(504/커넥션 타임아웃)해서 완료하지 못함 — 다음 세션에서 재검증 필요.
 
 ### 8-1. GitHub Actions 크론이 마이홈포털 API에 403 — 자동화 중단, 로컬 실행으로 전환
+
+> **2026-09-26 정정(26번)**: 이 403은 해외 IP 차단이 아니라 **GitHub 저장소 비밀값의 API 키 문제**였을 가능성이 높다. 공공데이터포털은 키가 틀려도 한국에서 403(`SERVICE_KEY_IS_NOT_REGISTERED_ERROR`)을 준다. 서울 중계기를 거쳐도 403이던 게 비밀값을 `.env.local`의 키로 바꾸자 200이 됐다. 아래 기록은 당시 판단 그대로 둔다.
 
 GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 등록 후 `workflow_dispatch`로 실제 실행해서 검증하는 과정에서 발견.
 
@@ -776,13 +778,30 @@ Edge Function은 표준 fetch라 PDF도 그대로 흘려보내고, 무료 플랜
 md5까지 같고(2.7초), 공고 API 160건이 온다. 비밀값 없는 호출·틀린 비밀값은 401, 허용 안 된 주소는 400.
 막히면 대안은 Oracle Cloud 무료 VM(춘천·서울 리전)에서 `npm run daily:update`를 크론으로 돌리는 것이다.
 
+**실제로 켜기까지(사용자가 `gh auth login -s workflow`·`npx.cmd supabase login`을 해 준 뒤)**
+
+1. 중계기를 배포하니 **service_role 키 비교가 401로 거절** — 위에 적은 대로 전용 비밀값 `KR_RELAY_SECRET`으로 바꿨다.
+2. GitHub에서 첫 실행: **PDF는 통과, 공고 API만 403.** 추측하지 않고 확인하려고 중계기에 진단(`diag=1` → 리전·출구 IP,
+   응답마다 `x-kr-relay-region`)과 `npm run check:relay`를 넣었다. 결과는 **서울(ap-northeast-2)에서 돌았고 출구도
+   AWS 서울 IP인데 403**이었다.
+3. 이 PC에서 일부러 틀린 키로 불러 보니 **한국에서도 403**(`SERVICE_KEY_IS_NOT_REGISTERED_ERROR`)이었다. 두 번 인코딩한 키도
+   마찬가지. 즉 GitHub 비밀값 `DATA_GO_KR_API_KEY`가 틀린 형식(아마 "Encoding" 키 — 코드는 "Decoding" 키를 인코딩해서
+   쓴다)이었다. 비밀값을 `.env.local`의 키로 바꾸자(값은 출력하지 않고 `gh secret set`으로 바로) **전 단계 성공**.
+   - 교훈: **403만 보고 원인을 단정하지 말 것.** 9월 6일에 이걸 해외 IP 차단으로 오진해서 20일을 수동 운영했다.
+     그래서 `myhome.ts`가 이제 응답의 `errMsg`·`returnAuthMsg`를 에러에 같이 남긴다.
+   - 그렇다면 중계기가 꼭 필요한지는 아직 모른다(해외 IP 차단이 실제로 있는지 확인 안 함). 이미 동작하고 비용이 없어서 그대로 둔다.
+4. 성공한 실행(run 36224997557): 중계기 서울·API 200·공고 페이지 200 → 160건 수집, **새 공고 0 · 변화 없음 160** —
+   8번 이후 "못 해 본" **재수집 시 unchanged로 잡히는지(idempotency)가 여기서 확인됐다.** 수집 181초(미국 러너에서
+   서울 DB까지 유닛마다 왕복하느라 로컬 27초보다 느리다), 추출·승인 합쳐 1분 안쪽.
+5. PC 작업 스케줄러는 `Disable-ScheduledTask`로 껐다(지우지 않음).
+
 **GitHub Actions 비용**: 비공개 저장소는 월 2,000분 무료, 평소 하루 두 번 × 몇 분이라 충분하다. 공개 저장소면 무제한이지만
 **60일 동안 저장소 활동이 없으면 예약 실행이 자동으로 꺼진다.**
 
 ## 아직 안 한 것 / 다음 단계 후보
 
-- **GitHub Actions 자동 갱신 켜기(26번, 사용자 작업)**: ① `npx supabase login` → `npx supabase functions deploy kr-relay --project-ref xzdmkehdljmomczjizjo --use-api` ② GitHub 저장소 Settings → Secrets → Actions에 `GEMINI_API_KEY` 추가 ③ Actions 탭에서 daily-update를 한 번 수동 실행해 초록불 확인 ④ 확인되면 `Disable-ScheduledTask -TaskName cheongyak-daily-update`로 PC 작업 끄기(둘 다 돌면 같은 공고를 두 번 추출한다).
-- **재수집 idempotency 실증 검증**: `applyIngestedAnnouncements()`의 "해시 같으면 unchanged, 다르면 recheck 전환" 로직은 코드 리뷰 수준으로는 맞지만, 실제로 같은 데이터를 두 번 수집했을 때 unchanged로 잡히는지는 API 불안정으로 이번 세션에서 확인 못 함.
+- **"사람이 확인" 34건 줄이기**: 첫 자동 갱신에서 82건은 자동 승인됐지만 34건이 남았다. 거의 다 "초안 유닛 N개 vs DB 유닛 M개이고 조건이 다름" — 초안은 평형·계층 축(예: 50㎡ 미만/이상), DB는 단지 축이라 짝을 못 짓는 경우다. 다단지 국민임대 공고에서 흔하다. 평형별 조건을 단지 전체에 "평형에 따라 다름"으로 붙이는 방식 등을 검토할 만하다.
+- **관리자 버튼을 GitHub 실행으로**: 배포할 때 fine-grained 토큰(이 저장소, Actions 쓰기)을 `GITHUB_ACTIONS_TOKEN`으로 넣는다. 지금은 이 PC에서 실행돼서, GitHub 예약 실행(09:17·18:17)과 겹치면 같은 공고를 두 번 추출할 수 있다(데이터는 안 깨지고 Gemini 한도만 쓴다).
 - **관리자 큐 UI 완성**: 설계서 7장의 필터 탭(pending/recheck/매핑실패/중복의심/완료), 행 단위 액션(숨기기·유형 고치기·조건 템플릿 적용), 다중 유닛 조건 복사("첫 유닛 조건을 나머지에 복사")는 아직 — 지금은 집계 숫자와 컬럼 표시만 있음. 마이홈 데이터 58건이 다중 유닛이라 이게 없으면 검수 속도가 느림.
 - **관리자 검수(가장 시급)**: 126건이 추출됐지만 **아직 하나도 승인되지 않아 실제 판정에는 전혀 반영되지 않았다**. `/admin/ai-drafts`에서 초안을 확인하고 유닛에 반영 → `review_status: ready` 전환해야 사용자가 순위·가점을 볼 수 있다. 126건을 사람이 다 보려면 시간이 걸리니, 확신도·요청수(`request_count`) 기준으로 우선순위를 잡거나 관리자 큐 UI를 먼저 개선하는 게 나을 수 있다.
 - **실패 3건 수동 입력**: `/admin/ai-drafts` 상단 "불러오기 실패" 섹션에서 원문을 열어 조건을 직접 입력하면 된다(15번에서 화면은 준비됨).
@@ -809,7 +828,7 @@ md5까지 같고(2.7초), 공고 API 160건이 온다. 비밀값 없는 호출·
 - **RLS는 `status in ('published','closed')`만 공개**한다(0002부터, 이전엔 published만) — 새 데이터를 넣었는데 화면에 안 보이면 버그가 아니라 `status`/`review_status`부터 확인. `getAnnouncements()`는 여기에 더해 마감 30일 지난 건을 애플리케이션 레벨에서 추가로 거른다.
 - **관리자 페이지는 지금 `service_role`로 우회 중**이라 인증 없이도 `/admin/*`이 열림 — 배포 전 반드시 인증 게이트 필요.
 - **마이홈포털 공공데이터 API는 세션 중 여러 번 504/커넥션 타임아웃을 냈다** — 우리 코드 문제가 아니라 그쪽 서버의 간헐적 불안정. `lib/ingest/myhome.ts`가 재시도(5회, 지수 백오프)로 대응하지만, 그래도 실패하면 며칠 안에 재시도하면 된다.
-- **마이홈포털 API는 해외 IP를 차단한다** — GitHub Actions에서 돌리면 403. 이 API를 서버에서 자동 호출하려면 반드시 한국 리전(로컬 PC, 국내 서버, 또는 Vercel Pro의 `icn1` 리전)에서 실행해야 한다.
+- **공공데이터포털은 키가 틀려도 403을 준다** — `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`. 9월 6일 GitHub의 403을 해외 IP 차단으로 오진했던 원인이다(26번). 키는 "Decoding"(원문) 형식을 넣는다 — 코드가 `encodeURIComponent`로 한 번 인코딩하므로 "Encoding" 키를 넣으면 두 번 인코딩돼 403이 난다. 해외 IP 차단이 실제로 있는지는 확인하지 않았고, 수집은 서울 중계기(`KR_RELAY=supabase`)를 거친다.
 - **`@supabase/supabase-js`는 Node 22+가 필요하다** — 내부 `realtime-js`가 네이티브 WebSocket을 요구해서 Node 20 이하에서는 클라이언트 생성 자체가 크래시한다. CI 설정 시 `node-version`을 꼭 22 이상으로.
 - **자동수집이 관리자 작업을 덮어쓰면 안 된다는 원칙**: `scripts/lib/ingest-upsert.ts`가 신규(insert)와 기존(update) 행을 분리하고, update는 "소스 소유 칸"만 명시적으로 나열한 컬럼 목록으로 한다 — status/review_status/summary/eligibility 등은 그 목록에 아예 없어서 코드 구조상 못 건드린다. 새 소스 필드를 추가할 때 이 upsert 헬퍼도 같이 갱신해야 한다.
 - **마이홈포털 API의 매입임대(다가구주택) 데이터는 개별 유닛 식별자가 없다** — 면적·보증금·월세·주소 해시로 그룹핑해서 유닛을 만든다(`toUnitsByFieldGroup`).
