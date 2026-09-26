@@ -234,6 +234,14 @@ function buildHeadline(
     return "가깝고 조건도 여유로운 집!";
   }
   if (transit.known && transit.value >= 0.7) return "출퇴근이 편한 집";
+
+  /**
+   * 점수가 아주 높으면 그 사실 자체를 말한다.
+   * 순위(tiers)가 있는 유닛이 16%뿐이라 "1순위" 분기를 못 타는 경우가 대부분인데,
+   * 그러면 99점짜리 집도 "해볼 만한 집"이라는 미지근한 문구를 달게 된다.
+   */
+  if (competitiveness === "comfortable" && score >= 85) return "지금 가장 가능성이 높은 집!";
+  if (score >= 75) return "가능성이 높은 집이에요";
   if (competitiveness === "comfortable") return "조건이 넉넉해서 해볼 만한 집";
   if (scale >= 0.7) return "많이 뽑아서 기회가 있는 집";
   if (competitiveness === "stretch") return "조건이 빠듯해요. 지원은 가능해요";
