@@ -19,6 +19,8 @@
 - **PDF→LLM 조건 추출 + 자동 승인 완료**(9·14·19번) — 129건 중 126건(98%) 추출. 사람이 전건 검수하는 대신 **스키마 검증을 통과한 111건을 자동 반영**했고(유닛 172개), 접수 중인 공고 기준 **판정 가능 57건**이다. 사람이 볼 건 접수중 기준 5건뿐.
 - **기타 조건(스키마로 표현 못 하는 자격 조건)이 사용자 화면까지 연결됨**(15번) — 관리자가 초안을 승인하면 공고 상세의 "직접 확인이 필요한 조건" 카드로 보인다.
 - **"어떤 유닛에 넣을지" 추천 기능을 설계 중**(11번 단계) — 자격 여부뿐 아니라 통근시간·당첨 가능성까지 반영한 추천 점수 + 한줄평. `Profile.commuteFrom`/`commuteTo` 타입만 먼저 추가된 상태, 실제 추천 로직은 인증 붙는 시점에 이어서.
+- **배포: https://cheongyak-main.vercel.app** (Vercel Hobby, 함수 리전 서울 `icn1`)(27번). GitHub 저장소와 연결돼 **main에 push하면 자동 배포**된다. 환경변수는 Supabase 3개(URL·anon·service_role)만 넣었다.
+  - **Supabase Auth의 URL 설정(Site URL·Redirect URLs)에 배포 주소를 넣어야 배포된 사이트에서 로그인이 된다** — 대시보드에서만 바꿀 수 있어 사용자 작업으로 남겼다(아래 "아직 안 한 것").
 - **지도**: 자리(placeholder)만 있고 실제 지도는 아직 안 붙음.
 - **청약핏(chan-hee1102/myhome)에서 가져온 것**(24번): 2026 소득기준표(2025 자리표시 값 교체), 청약 가점 84점 계산기 `/tools/gajeom`(민영 1순위 예치금 표 포함), 공고 상세 "지금 할 일"(접수처·방법·준비물·주말 마감 경고).
 - **다음으로 할 일 후보**: 배치 추출 완료 확인 후 관리자 검수, 통근 추천 기능 계속 개발, 경쟁률 데이터 조사, 관리자 큐 필터 탭 UI(지금은 집계 숫자만), 청약홈(민간 APT) 연동, 카카오맵 SDK, 이메일 발송 업체(Resend) 연결, (여유 생기면) Vercel Pro로 국내 리전 자동화.
@@ -156,7 +158,7 @@ GitHub Secrets(`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`DATA_GO_KR_API_KEY`) 
 
 **국내 IP로 자동화하는 대안 검토**:
 - GitHub Actions: 러너 리전 선택 불가 → 불가능.
-- Vercel: 서버리스 함수 리전을 `icn1`(서울)로 지정하면 가능하지만, **Hobby(무료) 플랜은 리전이 미국 고정이라 Pro(유료) 플랜이 있어야** 함. Cron도 Hobby는 하루 1회 제한(설계서 6-2에 이미 언급됨).
+- Vercel: 서버리스 함수 리전을 `icn1`(서울)로 지정하면 가능하지만, **Hobby(무료) 플랜은 리전이 미국 고정이라 Pro(유료) 플랜이 있어야** 함 _(2026-09-26 정정: Hobby도 리전 하나는 고를 수 있다 — 27번에서 `icn1`로 배포)_. Cron도 Hobby는 하루 1회 제한(설계서 6-2에 이미 언급됨).
 
 **결정**: 지금은 유료 인프라 없이 간다 — GitHub Actions의 `schedule` 크론을 주석 처리(비활성화)하고 `workflow_dispatch`(수동 실행)만 남김. 대신 `npm run ingest:myhome` 스크립트를 추가해 로컬(또는 향후 한국 리전 서버)에서 필요할 때 직접 수집하는 걸 당분간의 기본 운영 방식으로 함. `tsx`를 정식 devDependency로 승격(그동안 `npx tsx`로 온디맨드 설치해서 썼음).
 
@@ -798,7 +800,35 @@ md5까지 같고(2.7초), 공고 API 160건이 온다. 비밀값 없는 호출·
 **GitHub Actions 비용**: 비공개 저장소는 월 2,000분 무료, 평소 하루 두 번 × 몇 분이라 충분하다. 공개 저장소면 무제한이지만
 **60일 동안 저장소 활동이 없으면 예약 실행이 자동으로 꺼진다.**
 
+### 27. Vercel 배포
+
+사용자 요청: "배포해줘 vercel". 사용자가 `npx.cmd vercel login`을 해 준 뒤 진행했다.
+
+- **리전은 서울(`icn1`)** — DB가 서울이라 기본값(미국 동부 `iad1`)이면 서버 렌더링의 DB 왕복마다 태평양을 건넌다.
+  Vercel 문서를 확인하니 Hobby도 리전 **하나**는 고를 수 있다(8-1절의 "미국 고정"은 옛 정보). `vercel.json`의 `regions`.
+- **작업 중인 파일이 배포되지 않게** main을 `git worktree`로 따로 떠서 거기서 `vercel link`·첫 배포를 했다
+  (CLI 배포는 커밋 여부와 상관없이 폴더를 그대로 올린다). 끝난 뒤 worktree는 지웠다.
+  - ⚠️ `vercel link`는 그 폴더에 `.env.local`을 **새로 만든다**(Vercel의 개발 환경변수를 받아서). 원래 폴더에서 돌리면
+    우리 `.env.local`이 덮어써진다. 원래 폴더에는 link하지 않았다.
+- **환경변수**: 사이트가 실행 중에 읽는 건 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`·
+  `SUPABASE_SERVICE_ROLE_KEY` 셋뿐이다(Gemini·공공데이터·네이버 키는 스크립트 전용이라 GitHub 비밀값에만 있다).
+  운영·미리보기 두 환경에 넣었고 service_role은 sensitive로. 값은 `.env.local`에서 표준 입력으로 넘겨 출력하지 않았다.
+- **GitHub 연결**(`vercel git connect`) — 이제 main에 push하면 자동 배포된다. 실제로 push 한 번으로 배포되는 것을 확인했다.
+- **막혔던 지점**: 첫 배포가 `next build`는 성공했는데 **모든 경로가 404**. `vercel project add`로 만든 프로젝트는 프레임워크가
+  비어 있어서 Next 서버 대신 정적 출력만 서비스했다. `vercel.json`에 `"framework": "nextjs"`를 넣어 해결.
+
+**검증**: 운영 주소에서 `/`·공고 목록·공고 상세 2건·가점·소득 계산기·대시보드·로그인·가입 9개가 200, 전부 `icn1::icn1`
+(서울에서 받고 서울에서 처리), 0.2~1.7초. `/admin/announcements`는 로그인으로 307, `/api/admin/update`는 401.
+공고 상세의 "지금 할 일"과 가점 계산기가 실제 내용으로 렌더링된다.
+
+**배포 환경에서 안 되는 것(의도)**: 관리자 "지금 업데이트" 버튼은 `GITHUB_ACTIONS_TOKEN`이 없어서 "이 서버에서는 직접 돌릴 수
+없어요"가 뜬다. 자동 갱신은 GitHub Actions가 한다. **Hobby는 약관상 비상업 전용**이라 유료로 열 때는 Pro로 바꾼다.
+
 ## 아직 안 한 것 / 다음 단계 후보
+
+- **Supabase Auth URL 설정(사용자 작업, 배포 로그인에 필수)**: Supabase 대시보드 → Authentication → URL Configuration →
+  Site URL을 `https://cheongyak-main.vercel.app`로, Redirect URLs에 `https://cheongyak-main.vercel.app/**`를 추가
+  (`http://localhost:3000/**`는 남겨 둔다 — 로컬 개발용). 이게 없으면 배포 사이트에서 구글 로그인·이메일 확인 뒤 localhost로 튕긴다.
 
 - **"사람이 확인" 34건 줄이기**: 첫 자동 갱신에서 82건은 자동 승인됐지만 34건이 남았다. 거의 다 "초안 유닛 N개 vs DB 유닛 M개이고 조건이 다름" — 초안은 평형·계층 축(예: 50㎡ 미만/이상), DB는 단지 축이라 짝을 못 짓는 경우다. 다단지 국민임대 공고에서 흔하다. 평형별 조건을 단지 전체에 "평형에 따라 다름"으로 붙이는 방식 등을 검토할 만하다.
 - **관리자 버튼을 GitHub 실행으로**: 배포할 때 fine-grained 토큰(이 저장소, Actions 쓰기)을 `GITHUB_ACTIONS_TOKEN`으로 넣는다. 지금은 이 PC에서 실행돼서, GitHub 예약 실행(09:17·18:17)과 겹치면 같은 공고를 두 번 추출할 수 있다(데이터는 안 깨지고 Gemini 한도만 쓴다).
