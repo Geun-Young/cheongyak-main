@@ -14,6 +14,7 @@ export function Footer() {
         <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[13px] font-medium text-ink-2">
           <li><Link href="/" className="hover:text-brand">서비스 소개</Link></li>
           <li><Link href="/tools/income" className="hover:text-brand">소득 구간 계산기</Link></li>
+          <li><Link href="/tools/gajeom" className="hover:text-brand">청약 가점 계산기</Link></li>
           <li><Link href="/privacy" className="hover:text-brand">개인정보처리방침</Link></li>
           <li><Link href="/terms" className="hover:text-brand">이용약관</Link></li>
           <li><Link href="/admin/announcements" className="hover:text-brand">관리자</Link></li>

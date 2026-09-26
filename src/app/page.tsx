@@ -214,6 +214,15 @@ export default async function LandingPage() {
                 소득 구간 계산하기
               </ButtonLink>
             </Card>
+            <Card>
+              <p className="text-[17px] font-bold text-ink">민영 아파트 가점이 궁금하다면</p>
+              <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">
+                무주택 기간·부양가족·통장 가입 기간으로 84점 만점 가점과 1순위 예치금을 확인해요.
+              </p>
+              <ButtonLink href="/tools/gajeom" variant="secondary" className="mt-4 w-full">
+                청약 가점 계산하기
+              </ButtonLink>
+            </Card>
           </div>
         </div>
       </Container>

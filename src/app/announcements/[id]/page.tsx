@@ -9,6 +9,7 @@ import { HOUSING_TYPE_HINT } from "@/lib/regions";
 import { AgencyMark } from "@/components/AgencyMark";
 import { SupplyUnitPicker } from "@/components/SupplyUnitPicker";
 import { FavoriteButton } from "@/components/FavoriteButton";
+import { NextSteps } from "@/components/NextSteps";
 import { ButtonLink, Card, Chip, Container, cx } from "@/components/ui";
 
 export async function generateMetadata(props: PageProps<"/announcements/[id]">): Promise<Metadata> {
@@ -131,6 +132,8 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
             정리한 내용과 공고문이 다르면 공고문이 맞아요. 원문 링크에서 꼭 다시 확인하세요.
           </p>
         </Card>
+
+        <NextSteps a={a} />
         </div>
       </div>
     </Container>

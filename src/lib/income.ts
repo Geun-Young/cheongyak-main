@@ -2,19 +2,22 @@ import type { IncomeBracket, IncomeConfidence } from "./types";
 
 /**
  * 전년도 도시근로자 가구원수별 가구당 월평균소득(100%) — 원 단위.
- * 2025년 적용 기준(2024년 소득)으로 넣어둔 자리표시 값이다.
- * TODO(연동): 매년 3~4월 통계청 발표치로 교체하고 공고별 적용연도를 따를 것.
+ * 2026년 적용 기준(2026-01-01 공고분부터). 청약핏(chan-hee1102/myhome) standards.ts의 값을 가져왔고,
+ * 1~6인은 SH 인터넷청약 「2026년 도시근로자 월평균소득 기준」 70%·150% 표로 역산해 일치를 확인했다.
+ * 7인 이상은 공식 표가 「6인 + 1인당 가산액」 방식이라 가산액(INCOME_EXTRA_PER_PERSON)으로 계산한 값이다.
+ * TODO: 매년 초 새 표로 교체. 공고마다 적용 연도가 다를 수 있다(연초 공고는 전년도 표를 쓰기도 한다).
  */
-export const INCOME_TABLE_YEAR = 2025;
+export const INCOME_TABLE_YEAR = 2026;
+export const INCOME_EXTRA_PER_PERSON = 579_278;
 export const INCOME_100_BY_HOUSEHOLD: Record<number, number> = {
-  1: 3_482_964,
-  2: 5_415_712,
-  3: 7_198_649,
-  4: 8_248_467,
-  5: 8_775_071,
-  6: 9_563_282,
-  7: 10_351_493,
-  8: 11_139_704,
+  1: 3_813_363,
+  2: 5_866_270,
+  3: 8_168_429,
+  4: 8_802_202,
+  5: 9_326_985,
+  6: 9_906_263,
+  7: 9_906_263 + INCOME_EXTRA_PER_PERSON,
+  8: 9_906_263 + INCOME_EXTRA_PER_PERSON * 2,
 };
 
 /** 2026년 건강보험료율 7.19%, 직장가입자 본인부담 3.595% */
@@ -27,8 +30,9 @@ export function bracketLabel(b: IncomeBracket): string {
 }
 
 export function baseIncome(householdSize: number): number {
-  const size = Math.min(8, Math.max(1, householdSize));
-  return INCOME_100_BY_HOUSEHOLD[size];
+  const size = Math.max(1, Math.round(householdSize));
+  if (size <= 8) return INCOME_100_BY_HOUSEHOLD[size];
+  return INCOME_100_BY_HOUSEHOLD[8] + INCOME_EXTRA_PER_PERSON * (size - 8);
 }
 
 export function bracketFromPct(pct: number): IncomeBracket {
