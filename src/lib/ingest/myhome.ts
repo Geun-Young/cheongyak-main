@@ -355,7 +355,13 @@ async function fetchListOnce(
 ): Promise<{ items: MyHomeItem[]; totalCount: number }> {
   const url = `${BASE_URL}/${operation}?serviceKey=${encodeURIComponent(apiKey)}&pageNo=${pageNo}&numOfRows=${numOfRows}&_type=json`;
   const res = await krFetch(url);
-  if (!res.ok) throw new Error(`마이홈포털 API 응답 오류: ${res.status}`);
+  if (!res.ok) {
+    // 상태 코드만 보면 원인을 착각한다 — 키가 틀려도 403이 온다(SERVICE_KEY_IS_NOT_REGISTERED_ERROR).
+    // 2026-09-06의 GitHub 403을 해외 IP 차단으로 오진한 게 이 때문이었다(project.md 26번).
+    const body = await res.text().catch(() => "");
+    const reason = body.match(/"(?:errMsg|returnAuthMsg|resultMsg)"\s*:\s*"([^"]+)"/g)?.join(" ") ?? body.slice(0, 120);
+    throw new Error(`마이홈포털 API 응답 오류: ${res.status} ${reason}`);
+  }
   const data: MyHomeResponse = await res.json();
   if (data.response.header.resultCode !== "00") {
     throw new Error(`마이홈포털 API 오류: ${data.response.header.resultMsg}`);
