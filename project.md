@@ -746,9 +746,14 @@ Edge Function은 표준 fetch라 PDF도 그대로 흘려보내고, 무료 플랜
 **만든 것**
 
 - `supabase/functions/kr-relay/` — 중계기. `handler.ts`(표준 Request/Response만 씀, Node에서 테스트 가능) +
-  `index.ts`(`Deno.serve` 한 줄). **열린 프록시가 되지 않게** ① service_role 키를 가진 호출만(anon 키는
-  브라우저에 공개돼 있어 Supabase의 JWT 검증만으로는 부족하다) ② `apis.data.go.kr`·`www.myhome.go.kr`로만 보낸다.
-  service_role 키는 Supabase가 함수에 자동으로 넣어 줘서 **새 비밀값이 필요 없다.**
+  `index.ts`(`Deno.serve` 한 줄). **열린 프록시가 되지 않게** ① 중계기 전용 비밀값(`KR_RELAY_SECRET`,
+  Supabase 함수 비밀값과 GitHub 저장소 비밀값에 같은 값)을 가진 호출만(Supabase 게이트웨이의 JWT 검증은 브라우저에
+  공개된 anon 키로도 통과해서 부족하다) ② `apis.data.go.kr`·`www.myhome.go.kr`로만 보낸다.
+  - 처음엔 "함수에 자동으로 들어가는 `SUPABASE_SERVICE_ROLE_KEY`와 비교"해서 새 비밀값 없이 가려 했는데, 배포해 보니
+    **401로 거절됐다.** 이 프로젝트는 새 API 키 체계라 함수 안의 service_role 키가 `.env.local`의 예전 형식(JWT) 키와
+    달랐다(값은 보지 않고 digest로 확인). 키 형식에 기대면 또 깨질 수 있어서 전용 비밀값으로 바꿨다.
+  - 비밀값은 무작위 32바이트로 만들어 Supabase(`supabase secrets set`)와 GitHub(`gh secret set`)에만 넣었고
+    어디에도 출력·저장하지 않았다. 잃어버리면 새로 만들어 두 곳에 다시 넣으면 된다.
 - `src/lib/ingest/kr-fetch.ts` — `KR_RELAY=supabase`일 때만 중계기를 거치고(`x-region: ap-northeast-2` +
   `forceFunctionRegion`), 아니면 그냥 fetch. 수집(`myhome.ts`)과 PDF(`myhome-pdf.ts`)가 이걸 쓴다.
   **중계기 미배포·인증 실패는 원 사이트 응답으로 착각하지 않는다**(`x-kr-relay` 헤더로 구분) — `KrAccessError`로
@@ -767,8 +772,8 @@ Edge Function은 표준 fetch라 PDF도 그대로 흘려보내고, 무료 플랜
 **검증**: 중계기 본체를 Node 안에서 가짜 주소에 물려 실제 요청을 흘려봤다 — **PDF가 바이트 단위로 같고**(md5 일치,
 786,989바이트), 공고 API도 160건으로 같다. 잘못된 키(401)·허용 안 된 주소(400)·중계기 미배포(404) 모두
 `KrAccessError`로 멈춘다. 관리자 API는 비로그인에 401, 잠금은 살아 있는 실행이 있으면 건너뛴다. lint·`next build` 통과.
-**아직 검증 못 한 것: 실제 Supabase 서울 리전 Edge Function의 출구 IP가 마이홈포털을 통과하는지** — DB(같은 서울
-리전)로는 통과했지만, 함수 배포와 GitHub 설정은 사용자 계정이 필요해서 여기서 멈췄다(위 "아직 안 한 것" 첫 줄).
+**실제 배포 뒤 검증**: 사용자가 `gh auth login`·`supabase login`을 해 준 뒤 배포했다. 실제 중계기를 거쳐 PDF가
+md5까지 같고(2.7초), 공고 API 160건이 온다. 비밀값 없는 호출·틀린 비밀값은 401, 허용 안 된 주소는 400.
 막히면 대안은 Oracle Cloud 무료 VM(춘천·서울 리전)에서 `npm run daily:update`를 크론으로 돌리는 것이다.
 
 **GitHub Actions 비용**: 비공개 저장소는 월 2,000분 무료, 평소 하루 두 번 × 몇 분이라 충분하다. 공개 저장소면 무제한이지만

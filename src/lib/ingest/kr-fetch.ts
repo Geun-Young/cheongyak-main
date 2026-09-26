@@ -29,8 +29,11 @@ export async function krFetch(url: string, init: RequestInit = {}): Promise<Resp
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!base || !key) {
-    throw new KrAccessError("KR_RELAY=supabase에는 NEXT_PUBLIC_SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 필요해요.");
+  const secret = process.env.KR_RELAY_SECRET;
+  if (!base || !key || !secret) {
+    throw new KrAccessError(
+      "KR_RELAY=supabase에는 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, KR_RELAY_SECRET이 필요해요.",
+    );
   }
 
   const relay = new URL("/functions/v1/kr-relay", base);
@@ -38,7 +41,9 @@ export async function krFetch(url: string, init: RequestInit = {}): Promise<Resp
   // 지역을 정하지 않으면 호출한 곳(미국 러너)과 가까운 리전에서 돌아 다시 막힌다
   relay.searchParams.set("forceFunctionRegion", RELAY_REGION);
   const headers = new Headers(init.headers);
+  // authorization은 Supabase 게이트웨이의 JWT 검증용, x-relay-secret은 중계기 자체의 문지기다
   headers.set("authorization", `Bearer ${key}`);
+  headers.set("x-relay-secret", secret);
   headers.set("x-region", RELAY_REGION);
 
   const res = await fetch(relay, { ...init, headers });

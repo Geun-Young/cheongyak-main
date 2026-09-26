@@ -7,7 +7,10 @@
  * 2026-09-26에 서울 리전 Supabase(AWS 서울)에서 두 사이트 모두 200이 나는 것을 확인했다.
  *
  * 열린 프록시가 되면 안 되므로 두 겹으로 막는다.
- *  1) service_role 키를 가진 호출만 받는다(anon 키는 브라우저에 공개돼 있어서 JWT 검증만으로는 부족하다).
+ *  1) 중계기 전용 비밀값(x-relay-secret = KR_RELAY_SECRET)을 가진 호출만 받는다.
+ *     Supabase 게이트웨이의 JWT 검증은 anon 키로도 통과하는데 anon 키는 브라우저에 공개돼 있어서 부족하다.
+ *     service_role 키와 비교하지 않는 이유: 새 API 키를 쓰는 프로젝트는 함수에 들어가는
+ *     SUPABASE_SERVICE_ROLE_KEY가 예전 형식(JWT) 키와 달라서 일치하지 않는다(2026-09-26 실제로 겪음).
  *  2) 허용한 두 호스트로만 보낸다.
  *
  * Deno 전용 코드(Deno.serve)는 index.ts에만 두고, 여기는 표준 Request/Response만 써서
@@ -28,10 +31,10 @@ function fail(status: number, message: string): Response {
   });
 }
 
-export function createHandler(serviceRoleKey: string) {
+export function createHandler(relaySecret: string) {
   return async function handle(req: Request): Promise<Response> {
-    if (!serviceRoleKey || req.headers.get("authorization") !== `Bearer ${serviceRoleKey}`) {
-      return fail(401, "service_role 키가 필요해요");
+    if (!relaySecret || req.headers.get("x-relay-secret") !== relaySecret) {
+      return fail(401, "중계기 비밀값(KR_RELAY_SECRET)이 맞지 않아요");
     }
 
     const target = new URL(req.url).searchParams.get("url");
