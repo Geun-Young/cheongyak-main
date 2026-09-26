@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { getAnnouncementsForAdmin } from "@/lib/data/announcements";
 import { formatDate } from "@/lib/format";
 import { AgencyMark } from "@/components/AgencyMark";
+import { AdminUpdatePanel } from "@/components/AdminUpdatePanel";
 import { ButtonLink, Card, Chip, Container, PageTitle } from "@/components/ui";
 
 export const metadata: Metadata = { title: "공고 관리" };
@@ -38,6 +39,8 @@ export default async function AdminAnnouncementsPage() {
           </ButtonLink>
         }
       />
+
+      <AdminUpdatePanel />
 
       <Card padded={false} className="mt-6 overflow-x-auto">
         <table className="w-full min-w-[820px] text-[14px]">

@@ -14,7 +14,8 @@
     "extract:conditions": "tsx scripts/extract-conditions.ts",
     "grant-admin": "tsx scripts/grant-admin.ts",
     "fetch:popularity": "tsx scripts/fetch-popularity.ts",
-    "approve:drafts": "tsx scripts/approve-drafts.ts"
+    "approve:drafts": "tsx scripts/approve-drafts.ts",
+    "daily:update": "tsx scripts/daily-update.ts"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",

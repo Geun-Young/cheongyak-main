@@ -44,3 +44,9 @@ next-env.d.ts
 # 공공데이터포털에서 받은 개인 참고문서(엑셀/워드) - 코드가 아니라 로컬 참고용
 붙임*.xlsx
 붙임*.docx
+
+# 매일 공고 갱신(npm run daily:update) 실행 로그
+/logs
+
+# Supabase CLI 임시 파일
+supabase/.temp

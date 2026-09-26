@@ -148,3 +148,21 @@ export function commonArea(draftUnitNames: string[]): AreaInfo | null {
 
   return parsed[0];
 }
+
+/**
+ * 공고 컬럼 area_label·area_m2(마이그레이션 0008)에 넣을 값. 초안 유닛 이름들로 만든다.
+ * label은 보여주기용(여러 평형이면 "26~46㎡", 경계 표현이면 "85㎡ 이하"),
+ * m2는 commonArea가 인정할 때만 — 여러 평형이 섞이면 null이라 ㎡당 계산에서 빠진다.
+ */
+export function announcementArea(draftUnitNames: string[]): { label: string | null; m2: number | null } {
+  const parsed = draftUnitNames.map(parseArea).filter((a): a is AreaInfo => a !== null);
+  if (parsed.length === 0) return { label: null, m2: null };
+  const values = [...new Set(parsed.flatMap((a) => a.values))].sort((a, b) => a - b);
+  const label =
+    parsed.length === 1
+      ? parsed[0].label
+      : values.length === 1
+        ? `${values[0]}㎡`
+        : `${values[0]}~${values[values.length - 1]}㎡`;
+  return { label, m2: commonArea(draftUnitNames)?.representative ?? null };
+}

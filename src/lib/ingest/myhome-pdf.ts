@@ -8,6 +8,8 @@
  *      body: atchFileId=<atchFileId>&fileSn=<fileSn> -> PDF 바이너리
  */
 
+import { KrAccessError, krFetch } from "./kr-fetch";
+
 const DOWNLOAD_URL = "https://www.myhome.go.kr/hws/com/fms/cvplFileDownload.do";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
@@ -26,10 +28,14 @@ function findFileParams(html: string): { atchFileId: string; fileSn: string } | 
 /**
  * 공고 상세 URL(originalUrl)에서 첨부된 PDF를 찾아 다운로드한다.
  * 첨부파일이 없거나 파싱 실패 시 null을 반환한다(에러를 던지지 않음 — 호출부가 "PDF 없음"으로
- * 처리하도록).
+ * 처리하도록). 단 403은 던진다 — 해외 IP 차단이라 공고 탓이 아닌데, "PDF 없음"으로 기록되면
+ * 멀쩡한 공고가 실패로 남는다.
  */
 export async function fetchNoticePdf(detailUrl: string): Promise<NoticePdf | null> {
-  const detailRes = await fetch(detailUrl, { headers: { "User-Agent": UA } });
+  const detailRes = await krFetch(detailUrl, { headers: { "User-Agent": UA } });
+  if (detailRes.status === 403) {
+    throw new KrAccessError("마이홈포털이 접속을 막았어요(403). 해외 IP라면 KR_RELAY=supabase로 실행하세요.");
+  }
   if (!detailRes.ok) return null;
   const html = await detailRes.text();
 
@@ -37,7 +43,7 @@ export async function fetchNoticePdf(detailUrl: string): Promise<NoticePdf | nul
   if (!params) return null;
 
   const body = new URLSearchParams({ atchFileId: params.atchFileId, fileSn: params.fileSn });
-  const fileRes = await fetch(DOWNLOAD_URL, {
+  const fileRes = await krFetch(DOWNLOAD_URL, {
     method: "POST",
     headers: {
       "User-Agent": UA,

@@ -31,18 +31,27 @@ src/
     announcements/        공고 찾기, [id] 상세
     login/ signup/ onboarding/ me/ notifications/
     tools/income/         소득 구간 계산기
-    admin/announcements/  관리자 목록, new(등록·편집, ?id= 로 편집)
+    tools/gajeom/         청약 가점(84점) 계산기 + 민영 1순위 예치금 표
+    admin/announcements/  관리자 목록(맨 위 "지금 업데이트" 버튼), new(등록·편집, ?id= 로 편집)
     privacy/ terms/       초안 문서
   components/             UI 프리미티브(ui.tsx), 헤더/탭바, 목록 행, 판정 패널, 조건 빌더, 온보딩 플로우 …
   lib/
     types.ts              도메인 타입 (Announcement, Condition, Tier, ScoreRule, Profile, MatchResult)
     matching.ts           매칭 엔진: 자격요건 → 순위(tier) → 가점(scoreRules)
-    income.ts             소득 기준표(자리표시 값)와 건보료 역산
+    income.ts             2026 도시근로자 월평균소득 기준표와 건보료 역산
+    gajeom.ts             민영 청약 가점 84점 계산 + 프로필 → 가점 입력값(만 30세·혼인신고일 규칙)
+    deposit.ts            민영 1순위 예치금 표(주택공급규칙 별표2)
+    howto.ts              공고별 접수처·방법·준비물, 방문 접수 주말 마감 경고
+    ingest/kr-fetch.ts    한국 정부 사이트용 fetch(해외에서는 서울 리전 중계기 kr-relay 경유)
+    data/update-runner.ts 관리자 "지금 업데이트" — GitHub Actions 실행 또는 이 PC에서 실행
     profile-data.ts       체험 계정, 빈 프로필, URL 쿼리 → 임시 프로필, 사실(facts) 파생 (서버에서도 import 가능)
     profile.ts            useProfile·useFavorites 훅 (클라이언트 전용, profile-data를 재export)
     fields.ts             조건 빌더·판정 패널이 공유하는 필드 정의
     mock/announcements.ts 목업 공고 14건 (날짜는 오늘 기준 상대값)
     mock/notifications.ts 목업 알림
+scripts/daily-update.ts   매일 공고 갱신(수집 → 조건 추출 → 자동 승인). `npm run daily:update`
+supabase/functions/kr-relay/  서울 리전 중계기(마이홈포털이 해외 IP를 막아서)
+.github/workflows/daily-update.yml  위 갱신을 매일 두 번 GitHub Actions에서
 ```
 
 디자인 토큰은 `src/app/globals.css`의 `@theme`에 있습니다(Tailwind v4). 폰트는 Pretendard Variable(로컬 패키지).

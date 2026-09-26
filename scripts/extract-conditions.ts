@@ -12,6 +12,8 @@ import "./lib/load-env";
 import { createClient } from "@supabase/supabase-js";
 import { fetchNoticePdf } from "../src/lib/ingest/myhome-pdf";
 import { extractDraftFromPdf, GeminiQuotaExhaustedError } from "../src/lib/ingest/gemini-extract";
+import { announcementArea } from "../src/lib/ingest/parse-area";
+import { KrAccessError } from "../src/lib/ingest/kr-fetch";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -65,10 +67,14 @@ async function processOne(row: Row): Promise<"extracted" | "no_pdf" | "failed"> 
 
   try {
     const draft = await extractDraftFromPdf(GEMINI_API_KEY!, pdf.bytes);
+    // 면적은 초안에만 있고 ai_draft는 관리자 전용이라, 추천(㎡당 임대료)이 쓰도록 공고 컬럼에 따로 둔다
+    const area = announcementArea(draft.unitsFound.map((u) => u.name ?? ""));
     await supabase
       .from("announcements")
       .update({
         notice_pdf_url: row.original_url, // 원문 상세 URL을 기록(다운로드 자체는 매번 재수행)
+        area_label: area.label,
+        area_m2: area.m2,
         ai_draft: draft,
         ai_draft_status: "extracted",
         ai_draft_confidence: draft.confidence,
@@ -113,6 +119,12 @@ async function main() {
       if (e instanceof GeminiQuotaExhaustedError) {
         console.log("중단");
         stoppedByQuota = true;
+        break;
+      }
+      // 마이홈포털에 못 닿으면 남은 공고도 전부 같은 이유로 실패한다. 공고 탓이 아니니 기록하지 않고 멈춘다
+      if (e instanceof KrAccessError) {
+        console.log(`중단 — ${e.message}`);
+        process.exitCode = 1;
         break;
       }
       counts.failed++;

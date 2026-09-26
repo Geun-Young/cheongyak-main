@@ -14,6 +14,7 @@
  *   실제 upsert 시 어떤 컬럼을 덮어쓸지는 scripts/ingest-myhome.ts가 명시적으로 정한다.
  */
 import type { Announcement, AgencyCode, HousingType, Region, SupplyUnit } from "@/lib/types";
+import { krFetch } from "./kr-fetch";
 
 const BASE_URL = "https://apis.data.go.kr/1613000/HWSPR02";
 export const SOURCE = "myhome" as const;
@@ -353,7 +354,7 @@ async function fetchListOnce(
   numOfRows: number,
 ): Promise<{ items: MyHomeItem[]; totalCount: number }> {
   const url = `${BASE_URL}/${operation}?serviceKey=${encodeURIComponent(apiKey)}&pageNo=${pageNo}&numOfRows=${numOfRows}&_type=json`;
-  const res = await fetch(url);
+  const res = await krFetch(url);
   if (!res.ok) throw new Error(`마이홈포털 API 응답 오류: ${res.status}`);
   const data: MyHomeResponse = await res.json();
   if (data.response.header.resultCode !== "00") {
