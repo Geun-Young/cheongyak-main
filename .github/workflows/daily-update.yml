@@ -31,6 +31,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # 중계기가 서울에서 도는지·두 한국 사이트가 통과되는지 로그에 남긴다. 실패해도 갱신은 계속한다
+      - run: npm run check:relay
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+          KR_RELAY_SECRET: ${{ secrets.KR_RELAY_SECRET }}
       - run: npm run daily:update
         env:
           KR_RELAY: supabase

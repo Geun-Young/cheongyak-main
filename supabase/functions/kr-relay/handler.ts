@@ -31,13 +31,28 @@ function fail(status: number, message: string): Response {
   });
 }
 
-export function createHandler(relaySecret: string) {
+/** 응답마다 붙는, 이 함수가 실제로 돈 리전. 서울(ap-northeast-2)이 아니면 한국 사이트가 막는다 */
+export const REGION_HEADER = "x-kr-relay-region";
+
+export function createHandler(relaySecret: string, region = "unknown") {
   return async function handle(req: Request): Promise<Response> {
     if (!relaySecret || req.headers.get("x-relay-secret") !== relaySecret) {
       return fail(401, "중계기 비밀값(KR_RELAY_SECRET)이 맞지 않아요");
     }
 
-    const target = new URL(req.url).searchParams.get("url");
+    const params = new URL(req.url).searchParams;
+    // 진단: 이 함수가 어느 리전에서, 어떤 IP로 나가는지(scripts/check-relay.ts)
+    if (params.get("diag") === "1") {
+      let ip = "unknown";
+      try {
+        ip = (await (await fetch("https://api.ipify.org")).text()).trim();
+      } catch {
+        // 진단용이라 실패해도 리전은 알려 준다
+      }
+      return Response.json({ region, ip }, { headers: { [RELAY_HEADER]: "diag", [REGION_HEADER]: region } });
+    }
+
+    const target = params.get("url");
     let url: URL;
     try {
       url = new URL(target ?? "");
@@ -65,7 +80,7 @@ export function createHandler(relaySecret: string) {
       return fail(502, `원 사이트에 연결하지 못했어요: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    const out = new Headers({ [RELAY_HEADER]: "upstream" });
+    const out = new Headers({ [RELAY_HEADER]: "upstream", [REGION_HEADER]: region });
     for (const h of FORWARD_RESPONSE_HEADERS) {
       const v = upstream.headers.get(h);
       if (v) out.set(h, v);
