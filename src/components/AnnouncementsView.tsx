@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import type { Announcement } from "@/lib/types";
+import type { Announcement, Region } from "@/lib/types";
+import { REGIONS } from "@/lib/regions";
 import { deriveFacts, profileFromQuery, useProfile } from "@/lib/profile";
 import { saveGuestProfile, useGuestProfile } from "@/lib/guest";
 import { matchAll } from "@/lib/matching";
@@ -28,7 +29,14 @@ export function AnnouncementsView({ items }: { items: Announcement[] }) {
   const results = useMemo(() => (p ? matchAll(items, deriveFacts(p)) : undefined), [p, items]);
   const isGuest = !profile && Boolean(p);
 
-  const region = params.get("region") ?? "";
+  /**
+   * 지역 필터의 기본값: 주소의 ?region= → 없으면 빠른 필터 1단계에서 고른 사는 곳.
+   * 빠른 필터에서 서울을 골랐으면 목록도 서울부터 보여 준다(다시 고르게 하지 않는다).
+   * 로그인 사용자는 관심 지역이 여럿일 수 있어 여기서 하나로 좁히지 않는다(대시보드 추천이 관심 지역을 쓴다).
+   */
+  const queryRegion = params.get("region");
+  const region =
+    queryRegion && REGIONS.includes(queryRegion as Region) ? queryRegion : isGuest && p ? p.residenceRegion : "";
 
   return (
     <Container className="py-6 md:py-10">
@@ -66,7 +74,12 @@ export function AnnouncementsView({ items }: { items: Announcement[] }) {
       )}
 
       <div className="mt-5">
+        {/*
+          key: 이 화면 안의 빠른 필터로 다시 검색하면 주소(?region=)만 바뀌고 컴포넌트는 그대로라,
+          목록이 처음 받은 지역값을 계속 들고 있었다. 기본 지역이 바뀌면 목록을 새로 만든다.
+        */}
         <AnnouncementList
+          key={region}
           items={items}
           results={results}
           tab={tab}
