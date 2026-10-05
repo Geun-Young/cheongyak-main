@@ -84,7 +84,7 @@ export function matchUnitVariants(
 ): MatchResult[] {
   return (unit.variants ?? []).map((v, index): MatchResult => {
     const base = { announcementId: a.id, unitId: unit.id };
-    const special = isSpecialGroupVariant(v.name);
+    const special = v.special ?? isSpecialGroupVariant(v.name);
     const variant = { index, name: v.name, special };
     if (a.status === "closed" || daysLeft(a.applyEnd, today) < 0) {
       return { ...base, status: "closed", unmet: [], points: 0, maxPoints: 0, breakdown: [], variant };

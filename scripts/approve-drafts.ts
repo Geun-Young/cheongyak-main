@@ -19,6 +19,8 @@ import "./lib/load-env";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { normalizeDraft, autoApprovable } from "../src/lib/ingest/normalize-draft";
 import type { DraftUnit, ExtractionDraft } from "../src/lib/ingest/gemini-extract";
+import { expandAlternatives, type NamedRuleSet } from "../src/lib/condition-fixes";
+import type { ScoreRule } from "../src/lib/types";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -150,16 +152,28 @@ function toRules(draftUnit: DraftUnit, prefix: string) {
   };
 }
 
+type StoredRules = NamedRuleSet & { scoreRules: ScoreRule[] };
+
+/**
+ * 초안 유닛 하나 → 유닛에 적을 판정 규칙. 나이가 "또는"으로 묶여 직접 확인 조건에만 있으면 경로 둘로 나뉜다
+ * (condition-fixes.ts expandAlternatives — 나이·혼인). 초안이 아니라 여기서 나누는 이유는 거기 주석에 있다.
+ */
+function rulesFor(draftUnit: DraftUnit, prefix: string, name: string): StoredRules[] {
+  return expandAlternatives({ name, ...(toRules(draftUnit, prefix) as unknown as Omit<StoredRules, "name">) });
+}
+
 /** approveDraftToUnit과 같은 일을 하되, 스크립트에서 쓰려고 service_role 클라이언트를 직접 받는다 */
 async function writeUnit(sb: SupabaseClient, announcementId: string, unitId: string, draftUnit: DraftUnit) {
-  const r = toRules(draftUnit, unitId);
+  const parts = rulesFor(draftUnit, unitId, "");
+  if (parts.length > 1) return writeVariantRules(sb, announcementId, unitId, parts);
+  const r = parts[0];
   const { error } = await sb
     .from("supply_units")
     .update({
       eligibility: r.eligibility,
       tiers: r.tiers,
       score_rules: r.scoreRules,
-      other_requirements: r.otherRequirements,
+      other_requirements: r.otherRequirements ?? [],
       variants: null,
     })
     .eq("id", unitId)
@@ -167,11 +181,17 @@ async function writeUnit(sb: SupabaseClient, announcementId: string, unitId: str
   if (error) throw error;
 }
 
+/** 단지 하나에 초안 유닛 여러 개를 신청 경로로 붙인다 */
+async function writeVariants(sb: SupabaseClient, announcementId: string, unitId: string, variants: DraftUnit[]) {
+  const parts = variants.flatMap((v, i) => rulesFor(v, `${unitId}-v${i}`, v.name));
+  return writeVariantRules(sb, announcementId, unitId, parts);
+}
+
 /**
- * 단지 하나에 신청 경로 여러 개를 붙인다. 판정은 경로마다 하므로 유닛 자체의 조건 칸은 비운다 —
+ * 판정은 경로마다 하므로 유닛 자체의 조건 칸은 비운다 —
  * 남겨 두면 나중에 경로가 지워졌을 때 그 조건으로 잘못 판정된다.
  */
-async function writeVariants(sb: SupabaseClient, announcementId: string, unitId: string, variants: DraftUnit[]) {
+async function writeVariantRules(sb: SupabaseClient, announcementId: string, unitId: string, parts: StoredRules[]) {
   const { error } = await sb
     .from("supply_units")
     .update({
@@ -179,7 +199,14 @@ async function writeVariants(sb: SupabaseClient, announcementId: string, unitId:
       tiers: [],
       score_rules: [],
       other_requirements: [],
-      variants: variants.map((v, i) => ({ name: v.name, ...toRules(v, `${unitId}-v${i}`) })),
+      variants: parts.map((p) => ({
+        name: p.name,
+        ...(p.special !== undefined ? { special: p.special } : {}),
+        eligibility: p.eligibility,
+        tiers: p.tiers,
+        scoreRules: p.scoreRules,
+        otherRequirements: p.otherRequirements ?? [],
+      })),
     })
     .eq("id", unitId)
     .eq("announcement_id", announcementId);

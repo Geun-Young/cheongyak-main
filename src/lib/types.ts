@@ -95,6 +95,11 @@ export interface OtherRequirement {
 export interface UnitVariant {
   /** 공고문의 주택형·계층 이름. 예) "전용면적 50㎡ 이상 주택", "21A (청년 계층)" */
   name: string;
+  /**
+   * 우리가 묻지 않는 신분이 핵심인 경로인지. 정해 두지 않으면 이름으로 짐작한다(matching.ts isSpecialGroupVariant).
+   * 나이로 나눈 경로("주거약자용 · 만 65세 이상")처럼 이름만으로는 틀리게 짐작할 때 명시한다.
+   */
+  special?: boolean;
   eligibility: Condition[];
   tiers: Tier[];
   scoreRules: ScoreRule[];
