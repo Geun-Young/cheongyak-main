@@ -138,8 +138,16 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
   return <select className={cx("ui-select h-11", controlBase, className)} {...props} />;
 }
 
+/**
+ * 날짜 칸에는 기본 범위(1900~2099년)를 준다. 크롬의 날짜 입력은 max가 없으면 연도 칸이 6자리까지 받아서
+ * "20260615"를 치면 전부 연도에 들어가 값이 비어 버린다. 4자리 연도 범위가 있으면 4자리 뒤 월·일로 넘어간다.
+ * 칸마다 min/max를 넘기면 그 값이 우선한다.
+ */
+const DATE_BOUNDS = { min: "1900-01-01", max: "2099-12-31" };
+
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={cx("h-11", controlBase, className)} {...props} />;
+  const bounds = props.type === "date" ? DATE_BOUNDS : undefined;
+  return <input className={cx("h-11", controlBase, className)} {...bounds} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {

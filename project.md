@@ -1017,6 +1017,7 @@ lint·build 통과. 개발 서버 + 실제 크롬으로 울산·군산(전북 �
 - **`useProfile()`은 로그인 여부에 따라 저장 위치가 갈린다**(DB ↔ localStorage). 인터페이스는 같아서 컴포넌트는 차이를 몰라도 되지만, **`loading` 상태를 확인하지 않으면** 로그인한 사용자에게도 첫 렌더에 "로그인이 필요해요"가 번쩍 보인다.
 - **Supabase Auth의 Site URL을 바꾸면 그 전 주소(예: localhost)는 허용 목록에서 빠진다** — Site URL과 같은 호스트는 저절로 허용되기 때문이다. Redirect URLs에 따로 넣어야 한다. 루프백 IP(`127.0.0.1`)는 GoTrue가 설정 없이 항상 허용한다. 설정이 먹혔는지는 27번의 "틀린 인증 링크" 방법으로 확인한다.
 - **AI 조건은 "형식"뿐 아니라 "뜻"도 틀린다**: 숫자가 문자열로 오는 건 normalize가 고치지만, "대한민국 거주"·"통장 가입 불필요 → 없어야 함"처럼 뜻이 틀려 **모두를 탈락시키는** 조건은 형식 검사로 안 잡힌다. 새 패턴을 찾으면 `condition-fixes.ts`에 규칙을 더하고 `npm run fix:conditions`로 기존 데이터도 고친다. 찾는 법: 대표 사용자를 17개 시·도에 놓고 "누구도 신청 못 하는 공고"를 센다(29번).
+- **크롬 날짜 입력은 max가 없으면 연도 칸이 6자리까지 받는다**: "20260615"를 치면 전부 연도로 들어가 값이 빈다. 4자리 연도 범위(min/max)가 있으면 4자리 뒤 월·일로 넘어간다 — `ui.tsx`의 `Input`이 날짜 칸에 1900~2099년을 기본으로 준다.
 - **effect에서 서버 값을 state로 복사하지 말 것**: 이 프로젝트의 린트(`react-hooks/set-state-in-effect`)가 막는다. 값이 늦게 도착했을 때 사용자 입력을 덮어쓰는 버그도 생긴다. 대신 "서버 값 + 사용자가 바꾼 것(`edits`)"을 렌더 시점에 합치는 파생 값으로 만든다(`OnboardingFlow`, `useProfile` 참고).
 - **작업 스케줄러에서 `npm`을 부르면 실행 정책에 막힌다**: PowerShell의 `npm`은 `npm.ps1`인데, 작업 스케줄러가 띄우는 PowerShell은 기본 실행 정책(Restricted)이라 .ps1을 막는다(종료 코드 1, 로그도 안 남음). 개발 도구 세션은 `Bypass`라 손으로는 재현이 안 된다. `npm.cmd`를 직접 부른다(25번).
 - **Supabase DB의 `http` 확장은 바이너리를 못 받는다**: 응답을 text로 다뤄서 PDF는 `invalid byte sequence for encoding "UTF8"`로 실패한다. 또 REST(RPC)로 부르면 `authenticator`의 `statement_timeout=8s`에 걸린다. 한국 IP 중계는 Edge Function(`kr-relay`)으로 한다(26번).
