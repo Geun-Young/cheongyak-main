@@ -53,7 +53,8 @@ src/
     fields.ts             조건 빌더·판정 패널이 공유하는 필드 정의
     mock/announcements.ts 목업 공고 14건 (날짜는 오늘 기준 상대값)
     mock/notifications.ts 목업 알림
-scripts/daily-update.ts   매일 공고 갱신(수집 → 조건 추출 → 자동 승인). `npm run daily:update`
+scripts/daily-update.ts   매일 공고 갱신(마이홈포털·청약홈 수집 → 청약홈 민영 판정 규칙 → 조건 추출 → 자동 승인). `npm run daily:update`
+scripts/ingest-applyhome.ts, rules-applyhome.ts  청약홈 APT 분양 수집 / 민영 판정 규칙(src/lib/rules/sale-rules.ts)
 scripts/fix-conditions.ts 저장된 유닛의 조건을 condition-fixes.ts 규칙으로 보정. `npm run fix:conditions [-- --apply]`
 supabase/functions/kr-relay/  서울 리전 중계기(마이홈포털이 해외 IP를 막아서)
 .github/workflows/daily-update.yml  위 갱신을 매일 두 번 GitHub Actions에서

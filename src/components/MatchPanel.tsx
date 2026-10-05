@@ -8,6 +8,8 @@ import { useSpecialGroups } from "@/lib/special-groups-store";
 import { STATUS_META, checkCondition, matchUnit, matchUnitVariants } from "@/lib/matching";
 import { mentionsSpecialGroup } from "@/lib/special-groups";
 import { SpecialGroupPicker } from "./SpecialGroupPicker";
+import { computeGajeom, gajeomFromProfile, GAJEOM_MAX } from "@/lib/gajeom";
+import { gajeomRatio } from "@/lib/rules/sale-rules";
 import { describeFact } from "@/lib/fields";
 import { StatusBadge } from "./StatusBadge";
 import { RequestReviewButton } from "./RequestReviewButton";
@@ -47,6 +49,20 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
   // 신청 경로(주택형·계층)가 있으면 아래 조건·순위 카드는 이 결과를 낸 경로의 것을 보여 준다
   const rules = r.variant && unit.variants ? unit.variants[r.variant.index] : unit;
   const variantResults = unit.variants?.length ? matchUnitVariants(a, unit, facts) : null;
+  // 민영 1순위는 가점으로 뽑는다 — 정보를 입력한 회원은 프로필로 가점을 계산해 보여 준다(빠른 필터 값은 임의값이라 쓰지 않는다)
+  const privateSale = unit.sale && a.sale?.kind === "민영" ? { sale: a.sale, unit: unit.sale } : null;
+  const gajeom =
+    privateSale && profile?.onboardingDone
+      ? (() => {
+          const f = gajeomFromProfile(profile).input;
+          return computeGajeom({
+            homeless: f.homeless ?? true,
+            homelessYears: f.homelessYears ?? 0,
+            dependents: f.dependents ?? 0,
+            accountMonths: f.accountMonths ?? null,
+          });
+        })()
+      : null;
   // 순위나 신청 경로가 수급자·장애인 같은 신분으로 갈리는 공고면, 여기서 바로 체크할 수 있게 한다
   const groupSensitive =
     rules.tiers.some((t) => mentionsSpecialGroup(t.label)) || (unit.variants ?? []).some((v) => mentionsSpecialGroup(v.name));
@@ -66,6 +82,8 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
           )}
           <span className="text-sm text-ink-3">
             {isGuest ? "빠른 필터로 입력한 임시 조건 기준" : `${p.name}님 정보 기준`}
+            {/* 빠른 필터는 통장을 묻지 않고 가정한다(profile-data.ts profileFromQuery) — 분양 순위가 이 가정에 좌우된다 */}
+            {isGuest && a.sale && <span className="block text-[12px]">청약통장은 3년 가입·360만 원으로 가정했어요. 정보 입력에서 실제 값을 넣으면 정확해져요.</span>}
           </span>
         </div>
         {a.reviewStatus === "recheck" && r.status !== "needs_review" && (
@@ -143,7 +161,9 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
           <div className="mt-3">
             <p className="text-xl font-bold text-ink">조건을 정리하고 있어요.</p>
             <p className="mt-1 text-sm text-ink-2">
-              접수기간·임대료는 확인됐어요. 자격 요건과 배점표는 아직 구조화하는 중이에요. 정리되면 알림으로 판정을 보내드릴게요.
+              {a.sale
+                ? "접수 일정과 분양가는 확인됐어요. 공공분양·신혼희망타운 자격 판정은 준비 중이에요. 공고문에서 자격을 확인하세요."
+                : "접수기간·임대료는 확인됐어요. 자격 요건과 배점표는 아직 구조화하는 중이에요. 정리되면 알림으로 판정을 보내드릴게요."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <ButtonLink href={a.originalUrl} external>원문 공고문에서 자격요건 확인하기</ButtonLink>
@@ -162,10 +182,11 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
 
       {variantResults && r.status !== "closed" && (
         <Card>
-          <h3 className="text-base font-bold text-ink">주택형·계층마다 조건이 달라요</h3>
+          <h3 className="text-base font-bold text-ink">{a.sale ? "일반공급·특별공급 중 하나로 신청해요" : "주택형·계층마다 조건이 달라요"}</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-            이 단지는 아래 중 하나를 골라 신청해요. 하나라도 되면 신청할 수 있어요. 단지마다 어떤 주택형이 있는지는
-            공고문에서 확인하세요.
+            {a.sale
+              ? "하나라도 되면 신청할 수 있어요. 특별공급은 평생 한 번만 당첨될 수 있어요."
+              : "이 단지는 아래 중 하나를 골라 신청해요. 하나라도 되면 신청할 수 있어요. 단지마다 어떤 주택형이 있는지는 공고문에서 확인하세요."}
           </p>
           <ul className="mt-3 divide-y divide-line">
             {variantResults.map((v) => {
@@ -186,6 +207,38 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
               );
             })}
           </ul>
+        </Card>
+      )}
+
+      {privateSale && r.status !== "closed" && (
+        <Card>
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-base font-bold text-ink">청약 가점</h3>
+            {gajeom && (
+              <p className="text-ink">
+                <span className="text-2xl font-extrabold tnum">{gajeom.total}</span>
+                <span className="text-sm font-semibold text-ink-3"> / {GAJEOM_MAX.total}점</span>
+              </p>
+            )}
+          </div>
+          {gajeom ? (
+            <ul className="mt-2 space-y-1 text-[14px]">
+              {gajeom.lines.map((l) => (
+                <li key={l.key} className="flex justify-between gap-3">
+                  <span className="text-ink-2">{l.label} <span className="text-ink-3">· {l.note}</span></span>
+                  <span className="font-semibold tnum">{l.points} / {l.max}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-[14px] text-ink-2">정보 입력을 마치면 내 가점(84점 만점)을 여기서 계산해 드려요.</p>
+          )}
+          <p className="mt-3 rounded-md bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
+            이 주택형(전용 {privateSale.unit.areaM2 ?? "?"}㎡)은 1순위끼리 {gajeomRatio(privateSale.sale, privateSale.unit.areaM2)}로 뽑아요.
+          </p>
+          <ButtonLink href="/tools/gajeom" variant="secondary" size="sm" className="mt-3">
+            가점 계산기에서 자세히 보기
+          </ButtonLink>
         </Card>
       )}
 

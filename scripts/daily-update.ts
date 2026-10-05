@@ -75,6 +75,7 @@ interface Step {
 const STEPS: Step[] = [
   { label: "공고 수집(마이홈포털)", script: "ingest:myhome" },
   { label: "공고 수집(청약홈)", script: "ingest:applyhome" },
+  { label: "판정 규칙(청약홈 민영)", script: "rules:applyhome" },
   { label: "조건 추출", script: "extract:conditions" },
   { label: "자동 승인", script: "approve:drafts", args: ["--apply"] },
 ];

@@ -28,6 +28,23 @@ export const DEPOSIT_TABLE: Record<DepositClass, Record<DepositArea, number>> = 
   other: { "85": 200, "102": 300, "135": 400, all: 500 },
 };
 
+export const DEPOSIT_CLASS_REGIONS: Record<DepositClass, Region[]> = {
+  seoulBusan: ["서울", "부산"],
+  metro: ["대구", "인천", "광주", "대전", "울산"],
+  other: ["세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"],
+};
+
+/** 전용면적 → 예치금 구간 */
+export function depositArea(areaM2: number | null): DepositArea {
+  const a = areaM2 ?? 85;
+  return a <= 85 ? "85" : a <= 102 ? "102" : a <= 135 ? "135" : "all";
+}
+
+/** 거주지 구분·전용면적 → 1순위 예치금(만원) */
+export function depositFor(cls: DepositClass, areaM2: number | null): number {
+  return DEPOSIT_TABLE[cls][depositArea(areaM2)];
+}
+
 /** 세종은 광역시가 아니라 "그 외 지역"이다 */
 export function depositClass(region: Region): DepositClass {
   if (region === "서울" || region === "부산") return "seoulBusan";
