@@ -45,6 +45,8 @@ async function fetchTargets(): Promise<Row[]> {
     .from("announcements")
     .select("id, title, original_url")
     .in("ai_draft_status", ["none", "failed"])
+    // PDF를 읽어 조건을 뽑는 건 마이홈포털 공고뿐이다 — 청약홈은 구조화된 필드로 판정한다(project.md 32번)
+    .eq("source", "myhome")
     .order("apply_end", { ascending: true });
 
   if (onlyId) query = supabase.from("announcements").select("id, title, original_url").eq("id", onlyId);

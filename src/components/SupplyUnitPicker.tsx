@@ -8,6 +8,7 @@ import { useGuestProfile } from "@/lib/guest";
 import { useSpecialGroups } from "@/lib/special-groups-store";
 import { matchAnnouncement, matchUnit } from "@/lib/matching";
 import { recommendUnits } from "@/lib/recommend";
+import { saleUnitRows } from "@/lib/sale-display";
 import { MatchPanel } from "./MatchPanel";
 import { UnitLocationCard } from "./UnitLocationCard";
 import { Card, cx } from "./ui";
@@ -151,16 +152,25 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
       <MatchPanel a={a} unit={unit} />
 
       <Card>
-        <h3 className="text-base font-bold text-ink">일정과 임대 조건</h3>
+        <h3 className="text-base font-bold text-ink">{unit.sale ? "분양 조건" : "일정과 임대 조건"}</h3>
         <dl className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
           <div className="flex justify-between gap-4 border-b border-line pb-2.5">
             <dt className="text-ink-3">입주 예정</dt>
             <dd className="font-semibold text-right">{unit.moveIn ?? "공고문 참고"}</dd>
           </div>
-          <div className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
-            <dt className="shrink-0 text-ink-3">임대 조건</dt>
-            <dd className="font-semibold text-right">{unit.rentNote ?? "공고문 참고"}</dd>
-          </div>
+          {unit.sale ? (
+            saleUnitRows(unit.sale).map((r) => (
+              <div key={r.label} className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
+                <dt className="shrink-0 text-ink-3">{r.label}</dt>
+                <dd className="font-semibold text-right tnum">{r.value}</dd>
+              </div>
+            ))
+          ) : (
+            <div className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
+              <dt className="shrink-0 text-ink-3">임대 조건</dt>
+              <dd className="font-semibold text-right">{unit.rentNote ?? "공고문 참고"}</dd>
+            </div>
+          )}
         </dl>
       </Card>
 

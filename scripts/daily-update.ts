@@ -1,5 +1,5 @@
 /**
- * 매일 공고 갱신 — 수집 → 조건 추출 → 자동 승인을 한 번에 돌린다.
+ * 매일 공고 갱신 — 수집(마이홈포털·청약홈) → 조건 추출 → 자동 승인을 한 번에 돌린다.
  *
  * 어디서 부르나(project.md 25·26번):
  *  - GitHub Actions(.github/workflows/daily-update.yml) — 매일 두 번. 마이홈포털이 해외 IP를 막아서
@@ -73,7 +73,8 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { label: "공고 수집", script: "ingest:myhome" },
+  { label: "공고 수집(마이홈포털)", script: "ingest:myhome" },
+  { label: "공고 수집(청약홈)", script: "ingest:applyhome" },
   { label: "조건 추출", script: "extract:conditions" },
   { label: "자동 승인", script: "approve:drafts", args: ["--apply"] },
 ];

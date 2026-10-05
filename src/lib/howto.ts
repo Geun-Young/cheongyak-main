@@ -46,6 +46,15 @@ export function howTo(a: Pick<Announcement, "agency" | "housingType">): HowTo {
       visit: true,
     };
   }
+  if (a.housingType === "민영분양") {
+    return {
+      where: "청약홈",
+      url: "https://www.applyhome.co.kr",
+      method: "인터넷으로 신청해요. 특별공급, 1순위, 2순위 접수일이 달라요.",
+      bring: [CERT, "청약통장(가입 은행 확인)", LATER],
+      certHelp: CERT_HELP,
+    };
+  }
   if (a.housingType === "청년안심주택") {
     return {
       where: "청년안심주택 누리집",

@@ -1,4 +1,4 @@
-import type { Announcement, Condition, OtherRequirement, ScoreRule, SupplyUnit, Tier, UnitVariant } from "@/lib/types";
+import type { Announcement, Condition, OtherRequirement, SaleInfo, SaleUnitInfo, ScoreRule, SupplyUnit, Tier, UnitVariant } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -33,6 +33,7 @@ interface AnnouncementRow {
   source: Announcement["source"] | null;
   source_id: string | null;
   request_count: number;
+  sale: SaleInfo | null;
 }
 
 interface SupplyUnitRow {
@@ -53,6 +54,7 @@ interface SupplyUnitRow {
   score_rules: ScoreRule[];
   other_requirements: OtherRequirement[] | null;
   variants: UnitVariant[] | null;
+  sale: SaleUnitInfo | null;
   active: boolean;
 }
 
@@ -74,6 +76,7 @@ function toUnit(row: SupplyUnitRow): SupplyUnit {
     scoreRules: row.score_rules,
     otherRequirements: row.other_requirements ?? undefined,
     variants: row.variants ?? undefined,
+    sale: row.sale ?? undefined,
     active: row.active,
   };
 }
@@ -105,6 +108,7 @@ function toAnnouncement(row: AnnouncementRow, unitRows: SupplyUnitRow[]): Announ
     source: row.source ?? undefined,
     sourceId: row.source_id ?? undefined,
     requestCount: row.request_count,
+    sale: row.sale ?? undefined,
   };
 }
 

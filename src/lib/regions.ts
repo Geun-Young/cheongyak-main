@@ -9,7 +9,7 @@ export const CAPITAL_AREA: Region[] = ["서울", "경기", "인천"];
 
 export const HOUSING_TYPES: HousingType[] = [
   "국민임대", "영구임대", "50년임대", "통합공공임대", "행복주택", "매입임대", "전세임대", "장기전세",
-  "청년안심주택", "신혼희망타운", "공공분양", "공공지원민간임대",
+  "청년안심주택", "신혼희망타운", "공공분양", "민영분양", "공공지원민간임대",
 ];
 
 export const HOUSING_TYPE_HINT: Record<HousingType, string> = {
@@ -24,5 +24,6 @@ export const HOUSING_TYPE_HINT: Record<HousingType, string> = {
   청년안심주택: "역세권 청년·신혼부부 임대(서울)",
   신혼희망타운: "신혼부부 전용 분양·임대 단지",
   공공분양: "시세보다 저렴한 분양, 청약통장 필요",
+  민영분양: "민간 건설사가 짓는 아파트 분양. 1순위 안에서 가점·추첨으로 뽑아요",
   공공지원민간임대: "민간이 짓고 공공이 지원, 8년 이상 임대",
 };

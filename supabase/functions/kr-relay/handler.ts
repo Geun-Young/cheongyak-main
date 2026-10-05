@@ -17,7 +17,8 @@
  * Node에서도 그대로 테스트할 수 있게 했다.
  */
 
-const ALLOWED_HOSTS = new Set(["apis.data.go.kr", "www.myhome.go.kr"]);
+// 공공데이터포털 API · 마이홈포털(공고문 PDF) · 청약홈 분양정보(odcloud)
+const ALLOWED_HOSTS = new Set(["apis.data.go.kr", "www.myhome.go.kr", "api.odcloud.kr"]);
 const FORWARD_REQUEST_HEADERS = ["content-type", "user-agent", "accept"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "content-disposition"];
 

@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import type { Announcement } from "@/lib/types";
 import { daysLeft, daysUntilStart } from "@/lib/format";
 import { HOWTO_CAVEAT, howTo, weekendNote } from "@/lib/howto";
+import { saleOrderLine } from "@/lib/sale-display";
 import { Card } from "./ui";
 
 /**
@@ -15,6 +16,7 @@ export function NextSteps({ a }: { a: Announcement }) {
 
   const untilStart = daysUntilStart(a.applyStart);
   const how = howTo(a);
+  const order = a.sale ? saleOrderLine(a.sale) : undefined;
   const warns = [
     weekendNote(a, how),
     untilStart <= 0 && left === 0 ? "오늘이 마지막 날이에요. 마감 시각은 접수처마다 달라서 공고문에서 꼭 확인하세요." : undefined,
@@ -33,6 +35,7 @@ export function NextSteps({ a }: { a: Announcement }) {
       body: (
         <>
           {how.method}
+          {order && <span className="mt-1 block">{order}</span>}
           {warns.map((w) => (
             <span key={w} className="mt-1.5 block font-semibold text-danger">
               {w}

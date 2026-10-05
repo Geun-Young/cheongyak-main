@@ -10,6 +10,7 @@ import { AgencyMark } from "@/components/AgencyMark";
 import { SupplyUnitPicker } from "@/components/SupplyUnitPicker";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { NextSteps } from "@/components/NextSteps";
+import { regulationText, saleScheduleRows } from "@/lib/sale-display";
 import { ButtonLink, Card, Chip, Container, cx } from "@/components/ui";
 
 export async function generateMetadata(props: PageProps<"/announcements/[id]">): Promise<Metadata> {
@@ -122,13 +123,27 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
               <dt className="text-ink-3">접수 기간</dt>
               <dd className="font-semibold tnum">{formatDate(a.applyStart)} ~ {formatDate(a.applyEnd)}</dd>
             </div>
+            {a.sale && (
+              <>
+                {saleScheduleRows(a.sale).map((r) => (
+                  <div key={r.label} className="flex justify-between gap-4 border-b border-line pb-2.5">
+                    <dt className="text-ink-3">{r.label}</dt>
+                    <dd className="font-semibold tnum">{r.value}</dd>
+                  </div>
+                ))}
+                <div className="flex justify-between gap-4 border-b border-line pb-2.5">
+                  <dt className="text-ink-3">규제</dt>
+                  <dd className="font-semibold">{regulationText(a.sale)}</dd>
+                </div>
+              </>
+            )}
             <div className="flex justify-between gap-4 border-b border-line pb-2.5 sm:col-span-2">
               <dt className="text-ink-3">순위 산정</dt>
               <dd className="font-semibold">{a.rankingMethod}</dd>
             </div>
           </dl>
           <p className="mt-4 text-[13px] text-ink-3">
-            입주 예정·임대 조건·위치는 유닛마다 달라서 오른쪽 판정 카드에 유닛별로 표시돼요.
+            입주 예정·{a.sale ? "분양가" : "임대 조건"}·위치는 {a.sale ? "주택형" : "유닛"}마다 달라서 오른쪽 판정 카드에 {a.sale ? "주택형" : "유닛"}별로 표시돼요.
             정리한 내용과 공고문이 다르면 공고문이 맞아요. 원문 링크에서 꼭 다시 확인하세요.
           </p>
         </Card>

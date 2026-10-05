@@ -12,7 +12,47 @@ export type HousingType =
   | "청년안심주택"
   | "신혼희망타운"
   | "공공분양"
+  | "민영분양"
   | "공공지원민간임대";
+
+/** 접수 기간 [시작, 끝] (YYYY-MM-DD) */
+export type DateRange = [string, string];
+
+/**
+ * 청약홈(분양) 공고에만 있는 구조화 정보(project.md 32번). 민영 판정(1순위 요건·가점·특별공급)에 쓴다.
+ * 임대 공고(마이홈포털)에는 없다.
+ */
+export interface SaleInfo {
+  /** 민영주택 / 국민주택(공공분양·신혼희망타운) */
+  kind: "민영" | "국민";
+  /** 규제지역 — 1순위 요건(가입 기간 2년, 세대주, 5년 내 당첨 없음)과 가점제 비율이 달라진다 */
+  regulation: { speculative: boolean; adjusted: boolean; priceCap: boolean };
+  schedule: {
+    special?: DateRange;
+    rank1Local?: DateRange;
+    rank1Other?: DateRange;
+    rank2Local?: DateRange;
+    rank2Other?: DateRange;
+    winners?: string;
+    contract?: DateRange;
+  };
+  /** 시행사·시공사 */
+  developer?: string;
+  builder?: string;
+}
+
+/** 청약홈 주택형 하나의 분양 정보 */
+export interface SaleUnitInfo {
+  /** 전용면적(㎡). 예치금·가점제 비율이 이걸로 갈린다 */
+  areaM2: number | null;
+  /** 일반공급 세대수 */
+  general: number;
+  /** 특별공급 세대수(합계와 유형별) */
+  special: number;
+  specialBreakdown: Partial<Record<"newlywed" | "firstHome" | "multiChild" | "elderlyParent" | "newborn" | "youth" | "institution" | "relocation" | "other", number>>;
+  /** 분양 최고가(만원) */
+  priceTop: number | null;
+}
 
 export type Region =
   | "서울" | "부산" | "대구" | "인천" | "광주" | "대전" | "울산" | "세종"
@@ -144,6 +184,8 @@ export interface SupplyUnit {
    * 공고문은 주택형별로, 수집 API는 단지별로 나눠서 둘이 1:1로 안 엮일 때 쓴다(project.md 29번).
    */
   variants?: UnitVariant[];
+  /** 청약홈 분양 주택형이면 면적·세대수·분양가 */
+  sale?: SaleUnitInfo;
   /** 수집기가 소스에서 더 이상 이 유닛을 못 찾으면 false. 삭제하지 않고 숨기기만 한다 */
   active?: boolean;
 }
@@ -212,6 +254,8 @@ export interface Announcement {
   sourceId?: string;
   /** "조건 정리되면 알려주세요" 버튼을 누른 회원 수. 관리자 큐 정렬 기준 */
   requestCount?: number;
+  /** 청약홈 분양 공고면 규제지역·순위별 일정 등 */
+  sale?: SaleInfo;
 }
 
 export type EligibilityStatus = "eligible" | "ineligible" | "needs_review" | "closed";

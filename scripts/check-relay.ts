@@ -29,6 +29,10 @@ async function main() {
       url: `https://apis.data.go.kr/1613000/HWSPR02/rsdtRcritNtcList?serviceKey=${encodeURIComponent(process.env.DATA_GO_KR_API_KEY ?? "")}&pageNo=1&numOfRows=1&_type=json`,
     },
     {
+      label: "청약홈 분양정보 API",
+      url: `https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1/getAPTLttotPblancDetail?page=1&perPage=1&returnType=JSON&serviceKey=${encodeURIComponent(process.env.DATA_GO_KR_API_KEY ?? "")}`,
+    },
+    {
       label: "마이홈포털 공고 페이지",
       url: "https://www.myhome.go.kr/hws/portal/sch/selectRsdtRcritNtcDetailView.do?pblancId=21160",
     },

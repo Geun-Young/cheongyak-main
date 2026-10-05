@@ -168,7 +168,7 @@ function hashUnitFields(item: MyHomeItem): string {
 }
 
 /** 암호학적 강도가 필요 없는 변경 감지용 해시(FNV-1a 계열) — 외부 패키지 없이 충분하다 */
-function simpleHash(input: string): string {
+export function simpleHash(input: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i);

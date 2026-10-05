@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "ingest:myhome": "tsx scripts/ingest-myhome.ts",
+    "ingest:applyhome": "tsx scripts/ingest-applyhome.ts",
     "extract:conditions": "tsx scripts/extract-conditions.ts",
     "grant-admin": "tsx scripts/grant-admin.ts",
     "fetch:popularity": "tsx scripts/fetch-popularity.ts",
