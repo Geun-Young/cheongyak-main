@@ -16,7 +16,8 @@
     "fetch:popularity": "tsx scripts/fetch-popularity.ts",
     "approve:drafts": "tsx scripts/approve-drafts.ts",
     "daily:update": "tsx scripts/daily-update.ts",
-    "check:relay": "tsx scripts/check-relay.ts"
+    "check:relay": "tsx scripts/check-relay.ts",
+    "fix:conditions": "tsx scripts/fix-conditions.ts"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",

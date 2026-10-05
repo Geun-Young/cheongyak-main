@@ -39,7 +39,8 @@ src/
   components/             UI 프리미티브(ui.tsx), 헤더/탭바, 목록 행, 판정 패널, 조건 빌더, 온보딩 플로우 …
   lib/
     types.ts              도메인 타입 (Announcement, Condition, Tier, ScoreRule, Profile, MatchResult)
-    matching.ts           매칭 엔진: 자격요건 → 순위(tier) → 가점(scoreRules)
+    matching.ts           매칭 엔진: 자격요건 → 순위(tier) → 가점(scoreRules). 단지에 신청 경로(variants)가 있으면 경로마다 판정
+    condition-fixes.ts    AI 조건 중 모두를 탈락시키는 표현 바로잡기(거주 지역·통장 불필요·항상 참 등). residence.ts가 거주 지역 담당
     income.ts             2026 도시근로자 월평균소득 기준표와 건보료 역산
     gajeom.ts             민영 청약 가점 84점 계산 + 프로필 → 가점 입력값(만 30세·혼인신고일 규칙)
     deposit.ts            민영 1순위 예치금 표(주택공급규칙 별표2)
@@ -52,6 +53,7 @@ src/
     mock/announcements.ts 목업 공고 14건 (날짜는 오늘 기준 상대값)
     mock/notifications.ts 목업 알림
 scripts/daily-update.ts   매일 공고 갱신(수집 → 조건 추출 → 자동 승인). `npm run daily:update`
+scripts/fix-conditions.ts 저장된 유닛의 조건을 condition-fixes.ts 규칙으로 보정. `npm run fix:conditions [-- --apply]`
 supabase/functions/kr-relay/  서울 리전 중계기(마이홈포털이 해외 IP를 막아서)
 .github/workflows/daily-update.yml  위 갱신을 매일 두 번 GitHub Actions에서
 ```

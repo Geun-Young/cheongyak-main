@@ -86,7 +86,14 @@ export default async function AdminAnnouncementsPage() {
                   </td>
                   <td className="px-3 py-3 text-right tnum text-ink-2">{a.supplyUnits.length}</td>
                   <td className="px-3 py-3 text-right tnum text-ink-2">
-                    {a.supplyUnits.reduce((s, u) => s + u.eligibility.length + u.scoreRules.length, 0)}
+                    {a.supplyUnits.reduce(
+                      (s, u) =>
+                        s +
+                        u.eligibility.length +
+                        u.scoreRules.length +
+                        (u.variants ?? []).reduce((t, v) => t + v.eligibility.length + v.scoreRules.length, 0),
+                      0,
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/admin/announcements/new?id=${a.id}`} className="text-sm font-semibold text-brand">

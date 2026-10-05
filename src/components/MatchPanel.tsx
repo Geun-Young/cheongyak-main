@@ -4,11 +4,18 @@ import { Check, Info, X } from "lucide-react";
 import type { Announcement, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
-import { checkCondition, matchUnit } from "@/lib/matching";
+import { STATUS_META, checkCondition, matchUnit, matchUnitVariants } from "@/lib/matching";
 import { describeFact } from "@/lib/fields";
 import { StatusBadge } from "./StatusBadge";
 import { RequestReviewButton } from "./RequestReviewButton";
 import { ButtonLink, Card, cx } from "./ui";
+
+const toneCls = {
+  ok: "bg-ok-soft text-ok",
+  warn: "bg-warn-soft text-warn",
+  info: "bg-info-soft text-info",
+  muted: "bg-ground text-ink-3",
+} as const;
 
 export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
   const { profile } = useProfile();
@@ -33,6 +40,9 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
   const facts = deriveFacts(p);
   const r = matchUnit(a, unit, facts);
   const isGuest = !profile;
+  // 신청 경로(주택형·계층)가 있으면 아래 조건·순위 카드는 이 결과를 낸 경로의 것을 보여 준다
+  const rules = r.variant && unit.variants ? unit.variants[r.variant.index] : unit;
+  const variantResults = unit.variants?.length ? matchUnitVariants(a, unit, facts) : null;
 
   return (
     <div className="space-y-4">
@@ -60,6 +70,11 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         {r.status === "eligible" && (
           <div className="mt-3">
             <p className="text-xl font-bold text-ink">신청할 수 있어요.</p>
+            {r.variant && (
+              <p className="mt-1 text-[15px] text-ink-2">
+                신청 경로: <span className="font-semibold text-ink">{r.variant.name}</span>
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               {r.tier && (
                 <div className="min-w-28 rounded-lg bg-ok-soft px-3.5 py-2">
@@ -87,6 +102,11 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         {r.status === "ineligible" && (
           <div className="mt-3">
             <p className="text-xl font-bold text-ink">지금은 조건이 맞지 않아요.</p>
+            {r.variant && (
+              <p className="mt-1 text-[15px] text-ink-2">
+                가장 가까운 경로: <span className="font-semibold text-ink">{r.variant.name}</span>
+              </p>
+            )}
             <ul className="mt-2 space-y-1.5">
               {r.unmet.map((c) => (
                 <li key={c.id} className="flex items-start gap-2 text-[15px]">
@@ -102,7 +122,17 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
           </div>
         )}
 
-        {r.status === "needs_review" && (
+        {r.status === "needs_review" && r.variant && (
+          <div className="mt-3">
+            <p className="text-xl font-bold text-ink">대상에 해당하면 신청할 수 있어요.</p>
+            <p className="mt-1 text-sm text-ink-2">
+              일반 경로로는 조건이 맞지 않지만 <span className="font-semibold text-ink">{r.variant.name}</span> 경로로는
+              넣을 수 있어요. 이 대상인지는 입력하신 정보로 알 수 없어서, 아래 조건을 공고문에서 확인하세요.
+            </p>
+          </div>
+        )}
+
+        {r.status === "needs_review" && !r.variant && (
           <div className="mt-3">
             <p className="text-xl font-bold text-ink">조건을 정리하고 있어요.</p>
             <p className="mt-1 text-sm text-ink-2">
@@ -123,11 +153,40 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         )}
       </Card>
 
-      {unit.eligibility.length > 0 && r.status !== "closed" && (
+      {variantResults && r.status !== "closed" && (
         <Card>
-          <h3 className="text-base font-bold text-ink">자격 요건 체크</h3>
+          <h3 className="text-base font-bold text-ink">주택형·계층마다 조건이 달라요</h3>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+            이 단지는 아래 중 하나를 골라 신청해요. 하나라도 되면 신청할 수 있어요. 단지마다 어떤 주택형이 있는지는
+            공고문에서 확인하세요.
+          </p>
           <ul className="mt-3 divide-y divide-line">
-            {unit.eligibility.map((c) => {
+            {variantResults.map((v) => {
+              const meta = STATUS_META[v.status];
+              const mine = v.variant?.index === r.variant?.index;
+              return (
+                <li key={v.variant?.index} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className={cx("min-w-0 text-[15px]", mine ? "font-semibold text-ink" : "text-ink-2")}>
+                    {v.variant?.name}
+                    {v.status === "ineligible" && v.unmet[0] && (
+                      <span className="block text-[13px] font-normal text-ink-3">미달: {v.unmet[0].label}</span>
+                    )}
+                  </span>
+                  <span className={cx("shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold", toneCls[meta.tone])}>
+                    {meta.label}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {rules.eligibility.length > 0 && r.status !== "closed" && (
+        <Card>
+          <h3 className="text-base font-bold text-ink">자격 요건 체크{r.variant ? ` · ${r.variant.name}` : ""}</h3>
+          <ul className="mt-3 divide-y divide-line">
+            {rules.eligibility.map((c) => {
               const ok = checkCondition(c, facts);
               return (
                 <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
@@ -145,14 +204,14 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         </Card>
       )}
 
-      {unit.otherRequirements && unit.otherRequirements.length > 0 && r.status !== "closed" && (
+      {rules.otherRequirements && rules.otherRequirements.length > 0 && r.status !== "closed" && (
         <Card className="border-warn/30">
           <h3 className="text-base font-bold text-ink">직접 확인이 필요한 조건</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
             아래 조건은 입력하신 정보로는 자동으로 확인할 수 없어요. 해당되는지 공고문에서 꼭 확인하세요.
           </p>
           <ul className="mt-3 space-y-2.5">
-            {unit.otherRequirements.map((o, i) => (
+            {rules.otherRequirements.map((o, i) => (
               <li key={i} className="flex items-start gap-2">
                 <Info size={17} className="mt-0.5 shrink-0 text-warn" strokeWidth={2.2} />
                 <span>
@@ -165,11 +224,11 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
         </Card>
       )}
 
-      {unit.tiers.length > 0 && r.status === "eligible" && (
+      {rules.tiers.length > 0 && r.status === "eligible" && (
         <Card>
           <h3 className="text-base font-bold text-ink">순위는 이렇게 갈려요</h3>
           <ol className="mt-3 space-y-2">
-            {unit.tiers.map((t) => {
+            {rules.tiers.map((t) => {
               const mine = r.tier?.rank === t.rank && r.tier?.label === t.label;
               return (
                 <li key={`${t.rank}-${t.label}`} className={cx("flex items-center gap-3 rounded-md border px-3 py-2.5", mine ? "border-ok bg-ok-soft" : "border-line")}>

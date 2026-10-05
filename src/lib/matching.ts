@@ -38,7 +38,66 @@ function bandMatches(b: ScoreBand, v: FactValue): boolean {
   return true;
 }
 
-/** 공고의 게시상태·마감·검수여부는 공고 기준, 자격·순위·가점은 유닛 기준으로 판정한다 */
+/** 유닛이나 신청 경로(variant) — 둘 다 같은 모양의 자격·순위·가점을 가진다 */
+type Rules = Pick<SupplyUnit, "eligibility" | "tiers" | "scoreRules">;
+
+/** 자격 → 순위 → 가점. 자격이 하나라도 안 맞으면 순위·가점은 셈하지 않는다 */
+function evaluateRules(rules: Rules, facts: Facts): Pick<MatchResult, "unmet" | "tier" | "points" | "maxPoints" | "breakdown"> {
+  const unmet = rules.eligibility.filter((c) => !checkCondition(c, facts));
+  if (unmet.length > 0) return { unmet, points: 0, maxPoints: 0, breakdown: [] };
+
+  const tier = rules.tiers.find((t) => t.conditions.every((c) => checkCondition(c, facts)));
+  const breakdown: ScoreLine[] = rules.scoreRules.map((rule) => {
+    const v = facts[rule.field];
+    const band = rule.bands.find((b) => bandMatches(b, v));
+    const maxPoints = Math.max(...rule.bands.map((b) => b.points), 0);
+    return {
+      label: rule.label,
+      points: band?.points ?? 0,
+      maxPoints,
+      note: band?.note ?? "해당 없음",
+    };
+  });
+  const points = breakdown.reduce((s, l) => s + l.points, 0);
+  const maxPoints = breakdown.reduce((s, l) => s + l.maxPoints, 0);
+  return { unmet, tier, points, maxPoints, breakdown };
+}
+
+/**
+ * 우리가 묻지 않는 신분이 자격의 핵심인 경로(주거약자용·장애인·수급자·대학생 계층 등).
+ * 이 경로들은 나머지 조건이 느슨해서(예: 수급자 계층은 무주택만 보면 누구나 통과) 그대로 판정하면
+ * 거의 모든 사람이 "신청 가능"이 된다. 이 경로로만 통과하면 needs_review로 둔다.
+ * 고령자는 나이 조건(만 65세)이 들어 있어 스스로 걸러지므로 여기 넣지 않는다.
+ * "청년/대학생"처럼 일반 계층과 함께 적힌 경로는 일반 경로로 본다.
+ */
+export function isSpecialGroupVariant(name: string): boolean {
+  if (/주거약자|장애|수급|보호종료|유공자/.test(name)) return true;
+  return /대학생/.test(name) && !/청년|일반/.test(name);
+}
+
+/** 신청 경로마다 판정한다. 결과는 unit.variants와 같은 순서 */
+export function matchUnitVariants(
+  a: Announcement,
+  unit: SupplyUnit,
+  facts: Facts,
+  today = startOfToday(),
+): MatchResult[] {
+  return (unit.variants ?? []).map((v, index): MatchResult => {
+    const base = { announcementId: a.id, unitId: unit.id };
+    const special = isSpecialGroupVariant(v.name);
+    const variant = { index, name: v.name, special };
+    if (a.status === "closed" || daysLeft(a.applyEnd, today) < 0) {
+      return { ...base, status: "closed", unmet: [], points: 0, maxPoints: 0, breakdown: [], variant };
+    }
+    const e = evaluateRules(v, facts);
+    // 조건이 하나도 없는 경로는 근거가 없으니 통과로 치지 않는다(단일 유닛의 "조건 없음"과 같은 취급)
+    const status: EligibilityStatus =
+      e.unmet.length > 0 ? "ineligible" : v.eligibility.length === 0 || special ? "needs_review" : "eligible";
+    return { ...base, ...e, status, variant };
+  });
+}
+
+/** 공고의 게시상태·마감·검수여부는 공고 기준, 자격·순위·가점은 유닛(또는 유닛의 신청 경로) 기준으로 판정한다 */
 export function matchUnit(
   a: Announcement,
   unit: SupplyUnit,
@@ -57,33 +116,19 @@ export function matchUnit(
   if (a.status === "closed" || daysLeft(a.applyEnd, today) < 0) {
     return { ...base, status: "closed" };
   }
-  if (a.reviewStatus === "pending" || unit.eligibility.length === 0) {
+  if (a.reviewStatus === "pending") {
+    return { ...base, status: "needs_review" };
+  }
+  // 신청 경로가 있으면 경로 중 가장 좋은 결과가 이 단지의 결과다(하나라도 되면 신청할 수 있다)
+  if (unit.variants?.length) {
+    return pickBest(matchUnitVariants(a, unit, facts, today));
+  }
+  if (unit.eligibility.length === 0) {
     return { ...base, status: "needs_review" };
   }
 
-  const unmet = unit.eligibility.filter((c) => !checkCondition(c, facts));
-  if (unmet.length > 0) {
-    return { ...base, status: "ineligible", unmet };
-  }
-
-  const tier = unit.tiers.find((t) => t.conditions.every((c) => checkCondition(c, facts)));
-
-  const breakdown: ScoreLine[] = unit.scoreRules.map((rule) => {
-    const v = facts[rule.field];
-    const band = rule.bands.find((b) => bandMatches(b, v));
-    const maxPoints = Math.max(...rule.bands.map((b) => b.points), 0);
-    return {
-      label: rule.label,
-      points: band?.points ?? 0,
-      maxPoints,
-      note: band?.note ?? "해당 없음",
-    };
-  });
-
-  const points = breakdown.reduce((s, l) => s + l.points, 0);
-  const maxPoints = breakdown.reduce((s, l) => s + l.maxPoints, 0);
-
-  return { ...base, status: "eligible", tier, points, maxPoints, breakdown };
+  const e = evaluateRules(unit, facts);
+  return { ...base, ...e, status: e.unmet.length > 0 ? "ineligible" : "eligible" };
 }
 
 const STATUS_RANK: Record<EligibilityStatus, number> = {

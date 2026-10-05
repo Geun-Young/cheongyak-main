@@ -88,6 +88,20 @@ export interface OtherRequirement {
 }
 
 /**
+ * 단지(유닛) 안의 "신청 경로" 하나 — 주택형·계층별로 자격이 다를 때.
+ * 공고문은 "50㎡ 미만/이상", "일반/주거약자용", "청년/대학생 계층"처럼 경로별로 조건을 주고,
+ * 신청자는 그중 하나를 골라 넣는다. 그래서 단지 판정은 "경로 중 하나라도 되면"이다(matching.ts).
+ */
+export interface UnitVariant {
+  /** 공고문의 주택형·계층 이름. 예) "전용면적 50㎡ 이상 주택", "21A (청년 계층)" */
+  name: string;
+  eligibility: Condition[];
+  tiers: Tier[];
+  scoreRules: ScoreRule[];
+  otherRequirements?: OtherRequirement[];
+}
+
+/**
  * 공고 하나에 딸린 공급유닛 하나(예: "전용 36㎡ A타입").
  * 자격요건·순위·가점표·위치는 유닛마다 다를 수 있어 여기에 둔다.
  */
@@ -112,6 +126,11 @@ export interface SupplyUnit {
   scoreRules: ScoreRule[];
   /** 자동 판정에 쓸 수 없는 조건들. 화면에서 "추가 조건"으로 안내한다 */
   otherRequirements?: OtherRequirement[];
+  /**
+   * 신청 경로(주택형·계층)별 자격. 있으면 위 eligibility/tiers/scoreRules 대신 경로마다 판정한다.
+   * 공고문은 주택형별로, 수집 API는 단지별로 나눠서 둘이 1:1로 안 엮일 때 쓴다(project.md 29번).
+   */
+  variants?: UnitVariant[];
   /** 수집기가 소스에서 더 이상 이 유닛을 못 찾으면 false. 삭제하지 않고 숨기기만 한다 */
   active?: boolean;
 }
@@ -200,6 +219,12 @@ export interface MatchResult {
   points: number;
   maxPoints: number;
   breakdown: ScoreLine[];
+  /**
+   * 유닛에 신청 경로(variants)가 있을 때, 이 결과를 낸 경로.
+   * special = 우리가 묻지 않는 신분(주거약자·장애인·수급자·대학생 등)이 핵심인 경로 —
+   * 이 경로로만 통과하면 "신청 가능"이라 단정하지 않고 needs_review로 둔다.
+   */
+  variant?: { index: number; name: string; special: boolean };
 }
 
 /** 공고 하나에 속한 유닛들을 전부 판정한 결과 묶음 */

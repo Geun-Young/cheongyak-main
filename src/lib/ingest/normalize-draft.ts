@@ -16,7 +16,8 @@
  * 그래서 **받은 직후 한 번 정규화**하고, 정규화로도 못 고치는 것만 사람에게 올린다.
  * 이 파일이 자동 승인의 관문이다 — validate가 통과시킨 초안만 자동으로 반영된다.
  */
-import type { Condition, Field, FactValue, Operator } from "@/lib/types";
+import type { Condition, Field, FactValue, Operator, Tier } from "@/lib/types";
+import { fixRuleSet } from "@/lib/condition-fixes";
 import type { DraftUnit, ExtractionDraft } from "./gemini-extract";
 
 /** 값이 숫자여야 하는 필드. 나머지는 문자열/불리언이다 */
@@ -140,11 +141,19 @@ export function normalizeDraft(draft: ExtractionDraft): NormalizeResult {
         return acc;
       }, []);
 
-    const eligibility = normalizeList((u.eligibility ?? []) as Condition[], "eligibility", "");
-    const tiers = (u.tiers ?? []).map((t) => ({
-      ...t,
-      conditions: normalizeList((t.conditions ?? []) as Condition[], "tier", `${t.rank}순위: `),
-    }));
+    // 형식을 맞춘 뒤, "모두를 탈락시키는" 표현을 바로잡는다 — 거주 지역("대한민국"·"군산"),
+    // "통장 가입 불필요"를 "없어야 함"으로 담은 것 등(condition-fixes.ts)
+    const fixed = fixRuleSet({
+      eligibility: normalizeList((u.eligibility ?? []) as Condition[], "eligibility", ""),
+      tiers: (u.tiers ?? []).map((t) => ({
+        ...t,
+        rank: t.rank as Tier["rank"],
+        conditions: normalizeList((t.conditions ?? []) as Condition[], "tier", `${t.rank}순위: `),
+      })),
+      otherRequirements: u.otherRequirements,
+    });
+    fixedCount += fixed.changed;
+    const { eligibility, tiers, otherRequirements } = fixed.rules;
 
     // scoreRules의 bands는 스키마가 이미 NUMBER라 문자열이 섞일 일이 없다.
     // 다만 field는 확인한다 — 여기가 틀리면 가점이 통째로 잘못 붙는다.
@@ -156,7 +165,7 @@ export function normalizeDraft(draft: ExtractionDraft): NormalizeResult {
       return ok;
     });
 
-    return { ...u, eligibility, tiers, scoreRules } as DraftUnit;
+    return { ...u, eligibility, tiers, scoreRules, otherRequirements } as DraftUnit;
   });
 
   return { draft: { ...draft, unitsFound: units }, issues, fixedCount };

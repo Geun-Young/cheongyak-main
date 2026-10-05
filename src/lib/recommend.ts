@@ -127,9 +127,9 @@ interface Headroom {
  * 상한 조건이 없는 유닛이 절반이 넘어서, 근거가 없을 때는 known: false로 표시한다 —
  * 이 구분을 안 하면 "근거 없음"이 "여유롭다"로 둔갑한다.
  */
-function conditionHeadroom(unit: SupplyUnit, facts: Facts): Headroom {
+function conditionHeadroom(eligibility: SupplyUnit["eligibility"], facts: Facts): Headroom {
   const ratios: number[] = [];
-  for (const c of unit.eligibility) {
+  for (const c of eligibility) {
     if (c.operator !== "lte") continue;
     const limit = typeof c.value === "number" ? c.value : Number(c.value);
     const mine = facts[c.field];
@@ -263,7 +263,9 @@ export function scoreUnit(
   if (match.status !== "eligible") return null;
 
   const scale = supplyScale(unit.unitsCount);
-  const headroom = conditionHeadroom(unit, facts);
+  // 신청 경로로 통과했으면 그 경로의 상한(소득·자산)에서 얼마나 여유 있는지 본다
+  const eligibility = match.variant ? (unit.variants?.[match.variant.index]?.eligibility ?? []) : unit.eligibility;
+  const headroom = conditionHeadroom(eligibility, facts);
   const tierRank = match.tier?.rank;
   const competitiveness = classify(headroom, tierRank);
   const isOutskirt = detectOutskirt(unit.address);

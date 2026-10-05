@@ -157,6 +157,8 @@ export async function approveDraftToUnit(
       score_rules: draftScoreRulesToScoreRules(supplyUnitId, draftUnit.scoreRules),
       // 자동 판정엔 못 쓰지만 사용자가 알아야 하는 조건들. 승인 시 함께 옮긴다.
       other_requirements: draftUnit.otherRequirements ?? [],
+      // 관리자가 초안 유닛 하나를 이 유닛에 직접 붙이면, 전에 자동으로 붙었던 신청 경로는 버린다
+      variants: null,
     })
     .eq("id", supplyUnitId)
     .eq("announcement_id", announcementId);
