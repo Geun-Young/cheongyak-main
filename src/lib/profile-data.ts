@@ -1,5 +1,5 @@
 import { REGIONS } from "./regions";
-import type { Facts, IncomeBracket, Profile, Region } from "./types";
+import type { Facts, IncomeBracket, Profile, Region, SpecialGroup } from "./types";
 import { monthsBetween, yearsBetween, startOfToday } from "./format";
 
 /*
@@ -93,8 +93,13 @@ export function profileFromQuery(q: URLSearchParams): Profile | null {
   };
 }
 
-export function deriveFacts(p: Profile, today = startOfToday()): Facts {
+/**
+ * groups: 수급자 등 대상 계층(기기에만 저장, special-groups.ts). 프로필에 없어서 따로 받는다.
+ * 안 넘기면 "아직 답하지 않음"으로 판정한다.
+ */
+export function deriveFacts(p: Profile, today = startOfToday(), groups: SpecialGroup[] | null = null): Facts {
   return {
+    groups,
     age: p.birthDate ? yearsBetween(p.birthDate, today) : 0,
     incomePct: p.incomeBracket,
     housingStatus: p.housingStatus,

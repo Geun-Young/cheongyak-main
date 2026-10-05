@@ -41,7 +41,15 @@ export type Field =
 
 export type Operator = "eq" | "neq" | "lte" | "gte" | "in";
 export type FactValue = number | string | boolean;
-export type Facts = Record<Field, FactValue>;
+
+/** 수급자·장애인 등 대상 계층. 민감 정보라 프로필(서버)이 아니라 기기에만 둔다(special-groups.ts) */
+export type SpecialGroup = "livelihood" | "housingBenefit" | "disabled" | "veteran" | "singleParent";
+
+/**
+ * 판정에 쓰는 사용자 사실. groups는 조건(Field)이 아니라 순위·신청 경로 이름에 적힌 대상 계층과 맞춰 본다.
+ * null/없음 = 아직 답하지 않음.
+ */
+export type Facts = Record<Field, FactValue> & { groups?: SpecialGroup[] | null };
 
 export interface Condition {
   id: string;

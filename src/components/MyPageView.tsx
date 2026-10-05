@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import type { Announcement } from "@/lib/types";
 import { useFavorites, useProfile, deriveFacts } from "@/lib/profile";
 import { useAuth } from "@/lib/auth";
+import { useSpecialGroups } from "@/lib/special-groups-store";
 import { matchAnnouncement } from "@/lib/matching";
 import { bracketLabel } from "@/lib/income";
 import { formatManwon } from "@/lib/format";
@@ -17,6 +18,7 @@ export function MyPageView({ items }: { items: Announcement[] }) {
   const { profile, patch, loading } = useProfile();
   const { isLoggedIn, signOut } = useAuth();
   const fav = useFavorites();
+  const [groups] = useSpecialGroups();
 
   // 세션·프로필을 아직 읽는 중이면 판단을 미룬다. 이걸 안 하면 로그인한 사용자에게도
   // 잠깐 "로그인이 필요해요"가 번쩍 보인다.
@@ -65,7 +67,7 @@ export function MyPageView({ items }: { items: Announcement[] }) {
   }
 
   const p = profile;
-  const facts = deriveFacts(p);
+  const facts = deriveFacts(p, undefined, groups);
   const favorites = items.filter((a) => fav.has(a.id));
 
   const rows: { step: string; label: string; value: string }[] = [

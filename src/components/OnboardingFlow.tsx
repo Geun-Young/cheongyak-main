@@ -13,6 +13,7 @@ import { formatManwon } from "@/lib/format";
 import { FieldHelp } from "./FieldHelp";
 import { IncomeCalculator } from "./IncomeCalculator";
 import { Button, Card, Chip, Container, Field, Input, SegmentedControl, Select, Toggle, cx } from "./ui";
+import { SpecialGroupPicker } from "./SpecialGroupPicker";
 
 export const STEPS = [
   { key: "basic", title: "기본 정보", lead: "나이와 거주지는 거의 모든 공고의 기본 조건이에요." },
@@ -93,6 +94,11 @@ export function OnboardingFlow() {
       <Card>
         <h1 className="text-[22px] font-bold text-ink md:text-2xl">{isLast ? `${draft.name || "회원"}님, 다 됐어요` : current.title}</h1>
         {current.lead && <p className="mt-1 text-ink-3">{current.lead}</p>}
+        {!isLast && (
+          <p className="mt-2 text-[12px] text-ink-3">
+            입력한 정보는 조건에 맞는 공고를 찾고 알려 드리는 데만 써요. 주민등록번호·연락처는 묻지 않아요.
+          </p>
+        )}
 
         <div className="mt-6 space-y-6">
           {current.key === "basic" && <BasicStep d={draft} patch={patch} />}
@@ -206,6 +212,7 @@ function HouseholdStep({ d, patch }: StepProps) {
           </Select>
         </Field>
       </div>
+      <SpecialGroupPicker />
       <FieldHelp
         question="가구원 수는 어떻게 세나요?"
         steps={[

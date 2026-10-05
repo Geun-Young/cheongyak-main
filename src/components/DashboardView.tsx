@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Announcement } from "@/lib/types";
 import { DEMO_PROFILE, deriveFacts, useProfile } from "@/lib/profile";
+import { useSpecialGroups } from "@/lib/special-groups-store";
 import { countByStatus, matchAll } from "@/lib/matching";
 import { relativeTime } from "@/lib/format";
 import { filterByDesiredRegions, recommendAcross } from "@/lib/recommend";
@@ -14,30 +15,31 @@ import { ButtonLink, Container } from "./ui";
 export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; lastSyncedAt: string | null }) {
   const { profile, isLoggedIn } = useProfile();
   const p = profile ?? DEMO_PROFILE;
+  const [groups] = useSpecialGroups();
   const [tab, setTab] = useState<ListTab>("all");
   // 사용자가 고른 지역만 볼지, 전체를 볼지. 기본은 고른 지역이다.
   const [showAllRegions, setShowAllRegions] = useState(false);
 
   const { results, counts } = useMemo(() => {
-    const facts = deriveFacts(p);
+    const facts = deriveFacts(p, undefined, groups);
     const results = matchAll(items, facts);
     const base = countByStatus(results.values());
     const urgent = items.filter((a) => isUrgent(a, results.get(a.id))).length;
     return { results, counts: { ...base, urgent } as Record<SummaryKey, number> };
-  }, [p, items]);
+  }, [p, items, groups]);
 
   /**
    * 추천은 "고른 지역 안에서, 공고마다 어느 집이 나에게 맞는지"를 보여준다.
    * 판정(results)과 달리 자격이 되는 집만 들어가고, 마감 임박 순으로 정렬된다.
    */
   const { recommendations, regionFiltered } = useMemo(() => {
-    const facts = deriveFacts(p);
+    const facts = deriveFacts(p, undefined, groups);
     const scoped = filterByDesiredRegions(items, p.desiredRegions, showAllRegions);
     return {
       recommendations: recommendAcross(scoped, results, facts, p).slice(0, 6),
       regionFiltered: !showAllRegions && (p.desiredRegions?.length ?? 0) > 0,
     };
-  }, [p, items, results, showAllRegions]);
+  }, [p, items, results, showAllRegions, groups]);
 
   const needsOnboarding = isLoggedIn && !p.onboardingDone;
 

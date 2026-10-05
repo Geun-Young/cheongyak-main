@@ -12,6 +12,7 @@ export default function PrivacyPage() {
           <h2 className="text-base font-bold text-ink">수집하는 항목</h2>
           <p className="mt-1">생년월일, 거주 지역과 거주 시작일, 혼인 상태, 가구원 수, 자녀 수, 주택 소유 여부, 소득 구간, 총자산과 자동차가액, 청약통장 정보(종류·가입일·납입 횟수·납입 총액), 알림 수신 설정.</p>
           <p className="mt-1">소득은 금액이 아니라 구간(예: 100% 이하)만 저장해요. 소득 구간 계산기에 입력한 건강보험료·소득 금액은 저장하지 않아요.</p>
+          <p className="mt-1">수급자·장애인·국가유공자·한부모가족 여부(선택)는 수집하지 않아요. 서버로 보내지 않고 사용 중인 기기(브라우저)에만 저장해 공고를 거르는 데만 써요. 기기를 바꾸면 다시 체크해야 해요.</p>
         </section>
         <section>
           <h2 className="text-base font-bold text-ink">쓰는 목적</h2>

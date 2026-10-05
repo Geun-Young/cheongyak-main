@@ -41,6 +41,7 @@ src/
     types.ts              도메인 타입 (Announcement, Condition, Tier, ScoreRule, Profile, MatchResult)
     matching.ts           매칭 엔진: 자격요건 → 순위(tier) → 가점(scoreRules). 단지에 신청 경로(variants)가 있으면 경로마다 판정
     condition-fixes.ts    AI 조건 중 모두를 탈락시키는 표현 바로잡기(거주 지역·통장 불필요·항상 참 등). residence.ts가 거주 지역 담당
+    special-groups.ts     수급자·장애인 등 대상 계층으로 갈리는 순위·경로 판정. 체크값은 기기에만(special-groups-store.ts)
     income.ts             2026 도시근로자 월평균소득 기준표와 건보료 역산
     gajeom.ts             민영 청약 가점 84점 계산 + 프로필 → 가점 입력값(만 30세·혼인신고일 규칙)
     deposit.ts            민영 1순위 예치금 표(주택공급규칙 별표2)

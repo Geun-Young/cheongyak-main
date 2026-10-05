@@ -5,6 +5,7 @@ import { CircleDashed } from "lucide-react";
 import type { Announcement, EligibilityStatus, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
+import { useSpecialGroups } from "@/lib/special-groups-store";
 import { matchAnnouncement, matchUnit } from "@/lib/matching";
 import { recommendUnits } from "@/lib/recommend";
 import { MatchPanel } from "./MatchPanel";
@@ -26,8 +27,9 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
   const [selectedId, setSelectedId] = useState(a.supplyUnits[0].id);
   const { profile } = useProfile();
   const guest = useGuestProfile();
+  const [groups] = useSpecialGroups();
   const p = profile ?? guest;
-  const facts = useMemo(() => (p ? deriveFacts(p) : undefined), [p]);
+  const facts = useMemo(() => (p ? deriveFacts(p, undefined, groups) : undefined), [p, groups]);
 
   const unit: SupplyUnit = a.supplyUnits.find((u) => u.id === selectedId) ?? a.supplyUnits[0];
   const showTabs = a.supplyUnits.length > 1;

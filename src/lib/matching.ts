@@ -11,6 +11,7 @@ import type {
   SupplyUnit,
 } from "./types";
 import { daysLeft, startOfToday } from "./format";
+import { hasMentionedGroup, mentionsSpecialGroup } from "./special-groups";
 
 export function checkCondition(c: Condition, facts: Facts): boolean {
   const v = facts[c.field];
@@ -41,12 +42,21 @@ function bandMatches(b: ScoreBand, v: FactValue): boolean {
 /** 유닛이나 신청 경로(variant) — 둘 다 같은 모양의 자격·순위·가점을 가진다 */
 type Rules = Pick<SupplyUnit, "eligibility" | "tiers" | "scoreRules">;
 
+/**
+ * 순위 라벨에 대상 계층이 적혀 있으면("일반공급 1순위(생계·의료수급자, 유공자 등)") 그 신분을 체크한 사람만 그 순위다.
+ * 이 요건은 조건이 아니라 라벨에만 있어서, 전에는 아무에게나 1순위를 줬다(project.md 31번).
+ * 체크하지 않았거나 체크 항목이 없는 계층(북한이탈주민 등)이면 다음 순위로 넘어간다.
+ */
+function tierGroupOk(label: string, facts: Facts): boolean {
+  return !mentionsSpecialGroup(label) || hasMentionedGroup(label, facts.groups);
+}
+
 /** 자격 → 순위 → 가점. 자격이 하나라도 안 맞으면 순위·가점은 셈하지 않는다 */
 function evaluateRules(rules: Rules, facts: Facts): Pick<MatchResult, "unmet" | "tier" | "points" | "maxPoints" | "breakdown"> {
   const unmet = rules.eligibility.filter((c) => !checkCondition(c, facts));
   if (unmet.length > 0) return { unmet, points: 0, maxPoints: 0, breakdown: [] };
 
-  const tier = rules.tiers.find((t) => t.conditions.every((c) => checkCondition(c, facts)));
+  const tier = rules.tiers.find((t) => t.conditions.every((c) => checkCondition(c, facts)) && tierGroupOk(t.label, facts));
   const breakdown: ScoreLine[] = rules.scoreRules.map((rule) => {
     const v = facts[rule.field];
     const band = rule.bands.find((b) => bandMatches(b, v));
@@ -90,9 +100,14 @@ export function matchUnitVariants(
       return { ...base, status: "closed", unmet: [], points: 0, maxPoints: 0, breakdown: [], variant };
     }
     const e = evaluateRules(v, facts);
-    // 조건이 하나도 없는 경로는 근거가 없으니 통과로 치지 않는다(단일 유닛의 "조건 없음"과 같은 취급)
+    // 조건이 하나도 없는 경로는 근거가 없으니 통과로 치지 않는다(단일 유닛의 "조건 없음"과 같은 취급).
+    // 특수 계층 경로는 그 신분(수급자·장애인 등)을 체크했으면 신청 가능, 아니면 확인 필요
     const status: EligibilityStatus =
-      e.unmet.length > 0 ? "ineligible" : v.eligibility.length === 0 || special ? "needs_review" : "eligible";
+      e.unmet.length > 0
+        ? "ineligible"
+        : v.eligibility.length === 0 || (special && !hasMentionedGroup(v.name, facts.groups))
+          ? "needs_review"
+          : "eligible";
     return { ...base, ...e, status, variant };
   });
 }

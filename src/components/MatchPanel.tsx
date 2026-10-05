@@ -4,7 +4,10 @@ import { Check, Info, X } from "lucide-react";
 import type { Announcement, SupplyUnit } from "@/lib/types";
 import { deriveFacts, useProfile } from "@/lib/profile";
 import { useGuestProfile } from "@/lib/guest";
+import { useSpecialGroups } from "@/lib/special-groups-store";
 import { STATUS_META, checkCondition, matchUnit, matchUnitVariants } from "@/lib/matching";
+import { mentionsSpecialGroup } from "@/lib/special-groups";
+import { SpecialGroupPicker } from "./SpecialGroupPicker";
 import { describeFact } from "@/lib/fields";
 import { StatusBadge } from "./StatusBadge";
 import { RequestReviewButton } from "./RequestReviewButton";
@@ -20,6 +23,7 @@ const toneCls = {
 export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
   const { profile } = useProfile();
   const guest = useGuestProfile();
+  const [groups] = useSpecialGroups();
   const p = profile ?? guest;
 
   if (!p) {
@@ -37,12 +41,15 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
     );
   }
 
-  const facts = deriveFacts(p);
+  const facts = deriveFacts(p, undefined, groups);
   const r = matchUnit(a, unit, facts);
   const isGuest = !profile;
   // 신청 경로(주택형·계층)가 있으면 아래 조건·순위 카드는 이 결과를 낸 경로의 것을 보여 준다
   const rules = r.variant && unit.variants ? unit.variants[r.variant.index] : unit;
   const variantResults = unit.variants?.length ? matchUnitVariants(a, unit, facts) : null;
+  // 순위나 신청 경로가 수급자·장애인 같은 신분으로 갈리는 공고면, 여기서 바로 체크할 수 있게 한다
+  const groupSensitive =
+    rules.tiers.some((t) => mentionsSpecialGroup(t.label)) || (unit.variants ?? []).some((v) => mentionsSpecialGroup(v.name));
 
   return (
     <div className="space-y-4">
@@ -179,6 +186,16 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
               );
             })}
           </ul>
+        </Card>
+      )}
+
+      {groupSensitive && r.status !== "closed" && (
+        <Card>
+          <h3 className="text-base font-bold text-ink">이 공고는 대상 계층에 따라 순위·자격이 갈려요</h3>
+          <p className="mt-1 mb-3 text-[13px] leading-relaxed text-ink-2">
+            체크하면 순위와 신청 가능 여부에 바로 반영돼요. 체크하지 않으면 해당하지 않는 것으로 보고 계산해요.
+          </p>
+          <SpecialGroupPicker title="해당하는 게 있나요?" />
         </Card>
       )}
 

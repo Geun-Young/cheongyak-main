@@ -6,6 +6,7 @@ import type { Announcement, Region } from "@/lib/types";
 import { REGIONS } from "@/lib/regions";
 import { deriveFacts, profileFromQuery, useProfile } from "@/lib/profile";
 import { saveGuestProfile, useGuestProfile } from "@/lib/guest";
+import { useSpecialGroups } from "@/lib/special-groups-store";
 import { matchAll } from "@/lib/matching";
 import { bracketLabel } from "@/lib/income";
 import { AnnouncementList, type ListTab } from "./AnnouncementList";
@@ -16,6 +17,7 @@ export function AnnouncementsView({ items }: { items: Announcement[] }) {
   const params = useSearchParams();
   const { profile } = useProfile();
   const storedGuest = useGuestProfile();
+  const [groups] = useSpecialGroups();
   const [tab, setTab] = useState<ListTab>("all");
 
   const queryString = params.toString();
@@ -26,7 +28,7 @@ export function AnnouncementsView({ items }: { items: Announcement[] }) {
   }, [fromQuery]);
 
   const p = profile ?? fromQuery ?? storedGuest;
-  const results = useMemo(() => (p ? matchAll(items, deriveFacts(p)) : undefined), [p, items]);
+  const results = useMemo(() => (p ? matchAll(items, deriveFacts(p, undefined, groups)) : undefined), [p, items, groups]);
   const isGuest = !profile && Boolean(p);
 
   /**
