@@ -13,8 +13,10 @@ import { SummaryTiles, type SummaryKey } from "./SummaryTiles";
 import { ButtonLink, Container } from "./ui";
 
 export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; lastSyncedAt: string | null }) {
-  const { profile, isLoggedIn } = useProfile();
+  const { profile, isLoggedIn, loading } = useProfile();
+  // 체험 계정(김청약)은 비로그인 사람에게만 보여준다. 로그인했는데 저장된 정보가 없으면 남의 판정 대신 입력을 권한다(project.md 38번)
   const p = profile ?? DEMO_PROFILE;
+  const noProfileYet = isLoggedIn && !loading && !profile;
   const [groups] = useSpecialGroups();
   const [tab, setTab] = useState<ListTab>("all");
   // 사용자가 고른 지역만 볼지, 전체를 볼지. 기본은 고른 지역이다.
@@ -42,6 +44,40 @@ export function DashboardView({ items, lastSyncedAt }: { items: Announcement[]; 
   }, [p, items, results, showAllRegions, groups]);
 
   const needsOnboarding = isLoggedIn && !p.onboardingDone;
+
+  if (isLoggedIn && loading) {
+    return (
+      <Container className="py-6 md:py-10">
+        <p className="text-ink-3">내 정보를 불러오는 중이에요...</p>
+      </Container>
+    );
+  }
+
+  if (noProfileYet) {
+    return (
+      <Container className="py-6 md:py-10">
+        <section className="rounded-xl border border-brand/30 bg-brand-tint px-5 py-6 md:px-8 md:py-8">
+          <h1 className="text-[22px] font-bold text-ink md:text-[26px]">내 조건을 입력하면 순위가 보여요</h1>
+          <p className="mt-2 max-w-xl text-ink-2">
+            나이·거주지·세대·소득·자산·청약통장 6단계만 입력하면, 지금 올라온 {items.length}건을 한 번에 판정하고 공고마다 내 순위와
+            가점을 계산해 드려요. 5분이면 끝나요.
+          </p>
+          <ButtonLink href="/onboarding" className="mt-4">
+            정보 입력 시작하기
+          </ButtonLink>
+        </section>
+        {lastSyncedAt && <p className="mt-4 text-[13px] text-ink-3">마지막 갱신 {relativeTime(lastSyncedAt)}</p>}
+        <div className="mt-8">
+          <AnnouncementList
+            items={items}
+            tab="all"
+            onTabChange={() => {}}
+            emptyAction={<ButtonLink href="/announcements" variant="secondary">전체 공고 보기</ButtonLink>}
+          />
+        </div>
+      </Container>
+    );
+  }
 
   return (
     <Container className="py-6 md:py-10">

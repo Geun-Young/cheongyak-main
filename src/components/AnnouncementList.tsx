@@ -140,7 +140,7 @@ export function AnnouncementList({
       {visible.length === 0 ? (
         <Empty
           title="조건에 맞는 공고가 없어요"
-          body="지역이나 주택유형 필터를 넓혀 보세요. 새 공고가 올라오면 알림으로 알려드려요."
+          body="지역이나 주택유형 필터를 넓혀 보세요. 새 공고는 하루 두 번 들어와요."
           action={emptyAction}
         />
       ) : (

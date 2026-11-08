@@ -44,7 +44,7 @@ export async function updateSession(request: NextRequest) {
   const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   const needsAuth =
     isAdminPath ||
-    ["/me", "/onboarding", "/notifications"].some((p) => pathname === p || pathname.startsWith(p + "/"));
+    ["/me", "/onboarding"].some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   if (needsAuth && !user) {
     const loginUrl = new URL("/login", request.url);

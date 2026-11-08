@@ -3,16 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell } from "lucide-react";
 import { useProfile } from "@/lib/profile";
-import { NOTIFICATIONS } from "@/lib/mock/notifications";
 import { ButtonLink, cx } from "./ui";
 
 const NAV = [
   { href: "/dashboard", label: "홈" },
   { href: "/announcements", label: "공고 찾기" },
   { href: "/me", label: "마이페이지" },
-  { href: "/notifications", label: "알림" },
 ];
 
 export function Logo() {
@@ -29,7 +26,6 @@ export function Logo() {
 export function Header() {
   const pathname = usePathname();
   const { profile, isLoggedIn } = useProfile();
-  const unread = isLoggedIn ? NOTIFICATIONS.filter((n) => !n.read).length : 0;
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
@@ -59,18 +55,6 @@ export function Header() {
         <div className="flex items-center gap-2">
           {isLoggedIn ? (
             <>
-              <Link
-                href="/notifications"
-                className="relative grid size-10 place-items-center rounded-md text-ink-2 hover:bg-brand-soft hover:text-brand"
-                aria-label={unread > 0 ? `알림 ${unread}개` : "알림"}
-              >
-                <Bell size={20} />
-                {unread > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-danger px-1 text-[11px] font-bold text-white tnum">
-                    {unread}
-                  </span>
-                )}
-              </Link>
               <Link href="/me" className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 hover:bg-brand-soft">
                 <span className="grid size-8 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand">
                   {profile?.name ? profile.name.slice(0, 1) : "나"}

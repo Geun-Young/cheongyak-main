@@ -14,9 +14,8 @@ const AGREEMENTS = [
     required: true,
     label: "개인정보 수집·이용 동의",
     href: "/privacy",
-    note: "수집 항목: 생년월일, 거주 지역, 세대 구성, 무주택 여부, 소득 구간(금액 아님), 자산 구간, 청약통장 정보. 판정과 알림에만 써요.",
+    note: "수집 항목: 생년월일, 거주 지역, 세대 구성, 무주택 여부, 소득 구간(금액 아님), 자산 구간, 청약통장 정보. 공고 판정에만 써요.",
   },
-  { key: "marketing", required: false, label: "새 공고·혜택 소식 받기", href: undefined },
 ];
 
 export default function SignupPage() {

@@ -63,7 +63,7 @@ export function AnnouncementsView({ items }: { items: Announcement[] }) {
 
       {isGuest && (
         <div className="mt-4 rounded-xl border border-brand/30 bg-brand-tint px-4 py-3 text-sm text-ink-2">
-          이 조건은 저장되지 않아요. 가입하면 다음부터 자동으로 판정된 목록을 보여드리고, 마감 전에 알림을 보내드려요.
+          이 조건은 저장되지 않아요. 가입하면 다음부터 모든 공고를 내 조건으로 판정한 목록을 바로 보여드려요.
         </div>
       )}
 

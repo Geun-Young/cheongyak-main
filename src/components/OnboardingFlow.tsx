@@ -96,7 +96,7 @@ export function OnboardingFlow() {
         {current.lead && <p className="mt-1 text-ink-3">{current.lead}</p>}
         {!isLast && (
           <p className="mt-2 text-[12px] text-ink-3">
-            입력한 정보는 조건에 맞는 공고를 찾고 알려 드리는 데만 써요. 주민등록번호·연락처는 묻지 않아요.
+            입력한 정보는 공고마다 신청 가능 여부와 순위를 계산하는 데만 써요. 주민등록번호·연락처는 묻지 않아요.
           </p>
         )}
 
@@ -380,7 +380,7 @@ function AccountStep({ d, patch }: StepProps) {
   );
 }
 
-function DoneStep({ d, patch, goTo }: StepProps & { goTo: (k: StepKey) => void }) {
+function DoneStep({ d, goTo }: StepProps & { goTo: (k: StepKey) => void }) {
   const rows: { k: StepKey; label: string; value: string }[] = [
     { k: "basic", label: "거주", value: `${d.residenceRegion} · ${d.birthDate || "생년월일 미입력"}` },
     { k: "household", label: "세대", value: `${d.maritalStatus === "single" ? "미혼" : d.maritalStatus === "married" ? "기혼" : "예비 신혼부부"} · ${d.householdSize}인 가구 · 자녀 ${d.numChildren}명` },
@@ -403,13 +403,6 @@ function DoneStep({ d, patch, goTo }: StepProps & { goTo: (k: StepKey) => void }
           </li>
         ))}
       </ul>
-      <div>
-        <p className="text-sm font-semibold text-ink-2">알림</p>
-        <div className="divide-y divide-line">
-          <Toggle label="마감 3일 전·1일 전 알림" description="신청 가능한 공고만 보내요." checked={d.notifications.deadline} onChange={(v) => patch({ notifications: { ...d.notifications, deadline: v } })} />
-          <Toggle label="새 공고 즉시 알림" description="내 조건에 맞는 공고가 올라오면 바로 알려드려요." checked={d.notifications.newMatch} onChange={(v) => patch({ notifications: { ...d.notifications, newMatch: v } })} />
-        </div>
-      </div>
     </>
   );
 }

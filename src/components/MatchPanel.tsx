@@ -163,7 +163,7 @@ export function MatchPanel({ a, unit }: { a: Announcement; unit: SupplyUnit }) {
             <p className="mt-1 text-sm text-ink-2">
               {a.sale
                 ? "접수 일정과 분양가는 확인됐어요. 공공분양·신혼희망타운 자격 판정은 준비 중이에요. 공고문에서 자격을 확인하세요."
-                : "접수기간·임대료는 확인됐어요. 자격 요건과 배점표는 아직 구조화하는 중이에요. 정리되면 알림으로 판정을 보내드릴게요."}
+                : "접수기간·임대료는 확인됐어요. 자격 요건과 배점표는 아직 구조화하는 중이에요. 정리되면 이 화면에 판정이 나와요."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <ButtonLink href={a.originalUrl} external>원문 공고문에서 자격요건 확인하기</ButtonLink>

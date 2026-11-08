@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Bell, BellRing, ListChecks, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, ListChecks, SlidersHorizontal, Trophy, UserCheck } from "lucide-react";
 import hero from "../../public/hero-living.webp";
 import { getAnnouncements } from "@/lib/data/announcements";
 import { DEMO_PROFILE, deriveFacts } from "@/lib/profile-data";
@@ -14,13 +14,13 @@ import { ButtonLink, Card, Container } from "@/components/ui";
 const STEPS = [
   { Icon: SlidersHorizontal, title: "조건 5개 고르기", body: "사는 곳, 나이, 소득, 결혼, 집 유무. 30초면 돼요." },
   { Icon: ListChecks, title: "가능한 공고만 보기", body: "신청할 수 있는 공고에 초록 표시. 안 되면 이유도 알려줘요." },
-  { Icon: BellRing, title: "마감 전 알림 받기", body: "가입하면 마감 3일 전과 1일 전에 알려드려요." },
+  { Icon: Trophy, title: "내 순위 확인하기", body: "공고마다 몇 순위인지, 가점은 몇 점인지 계산해 드려요." },
 ];
 
 const FAQ = [
   {
     q: "무료인가요?",
-    a: "네. 공고 보기와 판정은 무료예요. 가입도 무료이고, 가입하면 조건이 저장되고 알림을 받을 수 있어요.",
+    a: "네. 공고 보기와 판정은 무료예요. 가입도 무료이고, 가입하면 조건이 저장돼서 매번 다시 입력하지 않아도 돼요.",
   },
   {
     q: "제 정보는 어디에 저장되나요?",
@@ -193,13 +193,13 @@ export default async function LandingPage() {
           <div className="space-y-4">
             <div className="rounded-xl bg-brand p-6 text-white shadow-card">
               <div className="flex items-center gap-2">
-                <Bell size={22} />
-                <p className="text-[19px] font-bold">3단계. 가입하면 알림이 와요</p>
+                <UserCheck size={22} />
+                <p className="text-[19px] font-bold">가입하면 한 번에 다 보여요</p>
               </div>
               <ul className="mt-3 space-y-2 text-[16px] leading-relaxed text-white/90">
-                <li>조건을 한 번만 저장하면 새 공고가 올라올 때마다 자동으로 판정해요.</li>
-                <li>신청할 수 있는 공고가 마감 3일 전, 1일 전이면 알려드려요.</li>
-                <li>관심 공고를 모아두고 순위·가점 내역을 언제든 다시 봐요.</li>
+                <li>조건을 한 번만 저장하면 모든 공고를 내 조건으로 한 번에 판정해요.</li>
+                <li>새 공고가 올라오면 들어올 때마다 자동으로 판정돼 있어요.</li>
+                <li>공고마다 내 순위와 가점 내역을 언제든 다시 봐요.</li>
               </ul>
               <ButtonLink href="/signup" variant="inverse" size="lg" className="mt-5 w-full">
                 3초 만에 시작하기

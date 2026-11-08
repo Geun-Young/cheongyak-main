@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Home, Search, User } from "lucide-react";
+import { Home, Search, User } from "lucide-react";
 import { cx } from "./ui";
 
 const TABS = [
   { href: "/dashboard", label: "홈", Icon: Home },
   { href: "/announcements", label: "공고", Icon: Search },
-  { href: "/notifications", label: "알림", Icon: Bell },
   { href: "/me", label: "마이", Icon: User },
 ];
 
@@ -22,7 +21,7 @@ export function MobileTabBar() {
       aria-label="하단 메뉴"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-3">
         {TABS.map(({ href, label, Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

@@ -11,11 +11,11 @@ import { matchAnnouncement } from "@/lib/matching";
 import { bracketLabel } from "@/lib/income";
 import { formatManwon } from "@/lib/format";
 import { AnnouncementRow } from "@/components/AnnouncementRow";
-import { Button, ButtonLink, Card, Chip, Container, Empty, PageTitle, SegmentedControl, Toggle } from "@/components/ui";
+import { Button, ButtonLink, Card, Chip, Container, Empty, PageTitle } from "@/components/ui";
 
 export function MyPageView({ items }: { items: Announcement[] }) {
   const router = useRouter();
-  const { profile, patch, loading } = useProfile();
+  const { profile, loading } = useProfile();
   const { isLoggedIn, signOut } = useAuth();
   const fav = useFavorites();
   const [groups] = useSpecialGroups();
@@ -131,39 +131,6 @@ export function MyPageView({ items }: { items: Announcement[] }) {
         </div>
 
         <div className="space-y-5">
-          <Card>
-            <h2 className="text-lg font-bold text-ink">알림 설정</h2>
-            <div className="mt-1 divide-y divide-line">
-              <Toggle
-                label="마감 알림"
-                description="신청 가능한 공고가 마감 3일 전·1일 전이면 보내요."
-                checked={p.notifications.deadline}
-                onChange={(v) => patch({ notifications: { ...p.notifications, deadline: v } })}
-              />
-              <Toggle
-                label="새 공고 알림"
-                description="내 조건에 맞는 공고가 올라오면 바로 보내요."
-                checked={p.notifications.newMatch}
-                onChange={(v) => patch({ notifications: { ...p.notifications, newMatch: v } })}
-              />
-            </div>
-            <div className="mt-3">
-              <p className="mb-1.5 text-sm font-semibold text-ink-2">받는 방법</p>
-              <SegmentedControl
-                name="알림 채널"
-                value={p.notifications.channel}
-                onChange={(v) => patch({ notifications: { ...p.notifications, channel: v } })}
-                options={[
-                  { value: "push", label: "웹 푸시" },
-                  { value: "kakao", label: "카카오 알림톡" },
-                ]}
-              />
-              {p.notifications.channel === "kakao" && (
-                <p className="mt-2 text-[13px] text-warn">카카오 알림톡은 준비 중이에요. 그전까지는 웹 푸시로 보내드려요.</p>
-              )}
-            </div>
-          </Card>
-
           <Card>
             <h2 className="text-lg font-bold text-ink">계정</h2>
             <p className="mt-1 text-sm text-ink-3">
