@@ -123,8 +123,12 @@ export function AnnouncementRow({ a, summary }: { a: Announcement; summary?: Ann
             <span>{a.agency.name.split(" ")[0]}</span>
             <span aria-hidden className="h-3 w-px bg-line-strong" />
             <span>{a.district}</span>
-            <span aria-hidden className="h-3 w-px bg-line-strong" />
-            <span className="tnum">총 {a.units.toLocaleString("ko-KR")}세대</span>
+            {a.units > 0 && (
+              <>
+                <span aria-hidden className="h-3 w-px bg-line-strong" />
+                <span className="tnum">총 {a.units.toLocaleString("ko-KR")}세대</span>
+              </>
+            )}
           </div>
           <p className="mt-1 hidden text-sm text-ink-2 md:line-clamp-1">{displaySummary(a)[0]}</p>
         </div>

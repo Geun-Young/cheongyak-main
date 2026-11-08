@@ -55,11 +55,20 @@ export function howTo(a: Pick<Announcement, "agency" | "housingType">): HowTo {
       certHelp: CERT_HELP,
     };
   }
+  if (a.housingType === "청년안심주택" && a.agency.code === "SH") {
+    return {
+      where: "SH 인터넷청약시스템",
+      url: "https://www.i-sh.co.kr",
+      method: "공공임대분은 SH 인터넷청약시스템에서 인터넷·모바일로만 신청해요. 서류심사 대상자가 되면 서류를 등기우편으로 내요.",
+      bring: [CERT, LATER],
+      certHelp: CERT_HELP,
+    };
+  }
   if (a.housingType === "청년안심주택") {
     return {
       where: "청년안심주택 누리집",
       url: "https://soco.seoul.go.kr",
-      method: "누리집 모집공고를 보고 인터넷으로 신청해요. 공공임대분과 민간임대분은 접수 방법이 다를 수 있어요.",
+      method: "민간임대분은 단지마다 접수처가 달라요. 누리집 공고 본문의 \"청약신청 페이지\" 링크로 인터넷 신청하고, 접수 기간이 1~5일로 짧으니 첫날 신청하세요.",
       bring: [CERT, LATER],
       certHelp: CERT_HELP,
     };

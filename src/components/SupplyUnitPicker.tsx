@@ -95,7 +95,7 @@ export function SupplyUnitPicker({ a }: { a: Announcement }) {
                       )}
                     </span>
                     <span className={cx("block text-[12px] font-normal tnum", active ? "text-white/80" : "text-ink-3")}>
-                      {u.unitsCount.toLocaleString("ko-KR")}세대
+                      {u.unitsCount > 0 ? `${u.unitsCount.toLocaleString("ko-KR")}세대` : "세대수 공고문 확인"}
                       {recByUnit.has(u.id) && ` · ${recByUnit.get(u.id)!.score}점`}
                     </span>
                   </span>

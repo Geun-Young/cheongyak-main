@@ -71,7 +71,12 @@ export default async function AnnouncementDetailPage(props: PageProps<"/announce
                 </div>
                 <h1 className="mt-2 text-[22px] font-bold leading-snug text-ink md:text-[26px]">{a.title}</h1>
                 <p className="mt-1.5 text-[15px] text-ink-2">
-                  {a.agency.name} · {a.district} · 총 <span className="tnum">{a.units.toLocaleString("ko-KR")}</span>세대
+                  {a.agency.name} · {a.district}
+                  {a.units > 0 && (
+                    <>
+                      {" "}· 총 <span className="tnum">{a.units.toLocaleString("ko-KR")}</span>세대
+                    </>
+                  )}
                 </p>
               </div>
             </div>

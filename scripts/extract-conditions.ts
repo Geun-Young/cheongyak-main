@@ -11,6 +11,7 @@
 import "./lib/load-env";
 import { createClient } from "@supabase/supabase-js";
 import { fetchNoticePdf } from "../src/lib/ingest/myhome-pdf";
+import { fetchYouthNoticePdf } from "../src/lib/ingest/youthhome";
 import { extractDraftFromPdf, GeminiQuotaExhaustedError } from "../src/lib/ingest/gemini-extract";
 import { announcementArea } from "../src/lib/ingest/parse-area";
 import { KrAccessError } from "../src/lib/ingest/kr-fetch";
@@ -38,18 +39,22 @@ interface Row {
   id: string;
   title: string;
   original_url: string;
+  source: string | null;
 }
 
 async function fetchTargets(): Promise<Row[]> {
   let query = supabase
     .from("announcements")
-    .select("id, title, original_url")
+    .select("id, title, original_url, source")
     .in("ai_draft_status", ["none", "failed"])
-    // PDF를 읽어 조건을 뽑는 건 마이홈포털 공고뿐이다 — 청약홈은 구조화된 필드로 판정한다(project.md 32번)
-    .eq("source", "myhome")
+    // PDF를 읽어 조건을 뽑는 건 마이홈포털·청년안심주택 공고다 — 청약홈은 구조화된 필드로 판정한다(project.md 32·34번)
+    .in("source", ["myhome", "youthhome"])
+    // 마감된 공고는 아무도 신청할 수 없다 — 하루 한도(모델당 20건)를 거기에 쓰지 않는다.
+    // 청년안심주택은 접수가 1~5일이라 처음 수집할 때 마감된 글이 많다(project.md 34번)
+    .eq("status", "published")
     .order("apply_end", { ascending: true });
 
-  if (onlyId) query = supabase.from("announcements").select("id, title, original_url").eq("id", onlyId);
+  if (onlyId) query = supabase.from("announcements").select("id, title, original_url, source").eq("id", onlyId);
   if (limit) query = query.limit(limit);
 
   const { data, error } = await query;
@@ -58,7 +63,8 @@ async function fetchTargets(): Promise<Row[]> {
 }
 
 async function processOne(row: Row): Promise<"extracted" | "no_pdf" | "failed"> {
-  const pdf = await fetchNoticePdf(row.original_url);
+  const pdf =
+    row.source === "youthhome" ? await fetchYouthNoticePdf(row.original_url) : await fetchNoticePdf(row.original_url);
   if (!pdf) {
     await supabase
       .from("announcements")
