@@ -1114,6 +1114,18 @@ otherRequirements로 넣는 경우가 있다. SH의 다른 임대(장기전세, 
 - 검증(로컬 빌드, 체험 계정): 전체 156/92 → 서울 12/10 → 경기 35/22 → 제주 2/0, 서울+청년안심주택 6/5.
   대시보드 맨 위 큰 숫자·요약 타일은 여전히 전체 공고 기준이다(목록 필터와 따로).
 
+### 40. 구글 로그인 화면에 supabase.co가 뜨는 것 없애기 — GIS 버튼 (2026-11-08)
+- 증상(사용자 제보): 구글 로그인 화면에 "xzdmkehdljmomczjizjo.supabase.co(으)로 이동". `signInWithOAuth`는 구글 → Supabase 주소로 돌아오는 흐름이라
+  구글이 그 주소를 보여 준다. 없애는 길은 ① Supabase 커스텀 도메인(유료 Pro + 애드온) ② 구글 공식 버튼(Google Identity Services)으로
+  ID 토큰을 받아 `signInWithIdToken` — 우리 사이트 안 팝업이라 cheongyak.omaru.kr이 보인다. **②(무료)로 했다.**
+- `components/GoogleSignInButton.tsx`: GIS 스크립트를 불러 `renderButton`(한국어, 팝업, FedCM). nonce는 원문을 Supabase에, SHA-256 해시를 구글에.
+  성공하면 `/auth/continue`(새 라우트)가 서버에서 갈 곳을 정한다 — `/auth/callback`과 같은 규칙을 `lib/auth-redirect.ts`로 공용화
+  (next는 같은 사이트 경로만 허용, "//"로 시작하는 주소는 무시).
+- **켜는 스위치는 `NEXT_PUBLIC_GOOGLE_CLIENT_ID`**(공개값, Supabase 구글 provider와 같은 클라이언트). 없거나 스크립트를 못 불러오면 예전 리디렉트 버튼이 나온다.
+- **사용자 몫(구글 API로 못 바꿈)**: 구글 클라우드 콘솔 → OAuth 클라이언트 → "승인된 자바스크립트 원본"에 `https://cheongyak.omaru.kr`,
+  `http://localhost:3000`. 안 넣으면 버튼을 그려도 `The given origin is not allowed for the given client ID`(403)로 막힌다 — 로컬에서 확인.
+  그래서 Vercel에는 이 환경변수를 **원본 등록 확인 뒤에** 넣는다(그전까진 운영은 예전 방식 그대로).
+
 ## 아직 안 한 것 / 다음 단계 후보
 - **kr-relay 재배포**: 허용 목록에 soco.seoul.go.kr·www.i-sh.co.kr을 넣었지만 아직 배포 전(34·35번). 두 사이트는 먼저 직접 접속하므로
   해외 IP를 막지 않으면 필요 없다. GitHub 실행에서 청년안심주택·SH 수집이 403이면 `npx supabase functions deploy kr-relay --project-ref <ref> --use-api`.

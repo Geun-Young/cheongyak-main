@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { afterLoginPath } from "@/lib/auth-redirect";
 
 /**
  * OAuth(카카오)·이메일 인증 링크에서 돌아오는 지점.
@@ -23,16 +24,5 @@ export async function GET(request: Request) {
     );
   }
 
-  // 원래 가려던 곳이 있으면 그리로.
-  if (next) return NextResponse.redirect(`${origin}${next}`);
-
-  // 처음 온 사람(프로필 없음)은 정보 입력부터, 이미 입력한 사람은 대시보드로.
-  const { data: profileRow } = await supabase
-    .from("user_profiles")
-    .select("onboarding_done")
-    .eq("user_id", data.user.id)
-    .maybeSingle();
-
-  const destination = profileRow?.onboarding_done ? "/dashboard" : "/onboarding";
-  return NextResponse.redirect(`${origin}${destination}`);
+  return NextResponse.redirect(`${origin}${await afterLoginPath(supabase, data.user.id, next)}`);
 }

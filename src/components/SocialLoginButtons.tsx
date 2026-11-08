@@ -5,6 +5,7 @@ import { signInWithOAuth, type OAuthProvider } from "@/lib/auth";
 import { Button } from "./ui";
 import { GoogleIcon } from "./GoogleIcon";
 import { KakaoIcon } from "./KakaoIcon";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 
 /**
  * 카카오 로그인은 Supabase가 account_email scope를 강제로 붙이는데, 그 동의항목은
@@ -21,6 +22,8 @@ const KAKAO_ENABLED = process.env.NEXT_PUBLIC_ENABLE_KAKAO_LOGIN === "true";
 export function SocialLoginButtons({ next, label }: { next?: string; label: "login" | "signup" }) {
   const [pending, setPending] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 구글 공식 버튼(GIS)을 못 쓰면(클라이언트 ID 미설정·스크립트 차단) 예전 리디렉트 방식 버튼으로 돌아간다
+  const [gisUnavailable, setGisUnavailable] = useState(false);
 
   const start = async (provider: OAuthProvider) => {
     setError(null);
@@ -49,16 +52,20 @@ export function SocialLoginButtons({ next, label }: { next?: string; label: "log
           {pending === "kakao" ? "카카오로 이동 중..." : `카카오${suffix}`}
         </Button>
       )}
-      <Button
-        variant="secondary"
-        size="lg"
-        className="w-full"
-        disabled={pending !== null}
-        onClick={() => start("google")}
-      >
-        <GoogleIcon />
-        {pending === "google" ? "구글로 이동 중..." : `구글${suffix}`}
-      </Button>
+      {gisUnavailable ? (
+        <Button
+          variant="secondary"
+          size="lg"
+          className="w-full"
+          disabled={pending !== null}
+          onClick={() => start("google")}
+        >
+          <GoogleIcon />
+          {pending === "google" ? "구글로 이동 중..." : `구글${suffix}`}
+        </Button>
+      ) : (
+        <GoogleSignInButton next={next} label={label} onUnavailable={() => setGisUnavailable(true)} />
+      )}
       {error && <p className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
     </div>
   );
