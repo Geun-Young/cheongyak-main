@@ -178,6 +178,16 @@ export function matchAnnouncement(
   today = startOfToday(),
 ): AnnouncementMatchSummary {
   const unitResults = a.supplyUnits.map((u) => matchUnit(a, u, facts, today));
+  // 단지가 하나도 없는 공고가 있다 — 원본 목록에서 빠져 수집기가 유닛을 전부 비활성화했는데 공고는 아직 게시 중인 경우.
+  // 빈 배열을 pickBest에 넘기면 reduce가 던져서 로그인 후 대시보드 전체가 500이 났다(project.md 37번). 판정 근거가 없으니 "확인 필요".
+  if (unitResults.length === 0) {
+    const closed = a.status === "closed" || daysLeft(a.applyEnd, today) < 0;
+    return {
+      announcementId: a.id,
+      unitResults,
+      best: { announcementId: a.id, unitId: "", status: closed ? "closed" : "needs_review", unmet: [], points: 0, maxPoints: 0, breakdown: [] },
+    };
+  }
   return { announcementId: a.id, unitResults, best: pickBest(unitResults) };
 }
 

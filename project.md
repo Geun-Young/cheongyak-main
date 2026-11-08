@@ -1085,6 +1085,14 @@ otherRequirements로 넣는 경우가 있다. SH의 다른 임대(장기전세, 
   t.js는 경로와 페이지 제목만 보내고 ?쿼리는 안 보내며, /admin 경로는 세지 않는다. 개인정보처리방침에 "방문 통계" 항목 추가.
 - omaru.kr 메인 "Web" 배너에 추가(그림은 홈 화면 hero-living.webp).
 
+### 37. 로그인 후 대시보드 500 — 단지 없는 공고 (2026-11-08)
+- 증상: 로그인하면 "This page couldn't load". /dashboard가 500, 오류는 `Reduce of empty array with no initial value`.
+- 원인: myhome-21142가 원본 목록에서 빠져 수집기가 유닛을 전부 비활성화(`active=false`)했는데 공고는 published로 남았다.
+  로그인 대시보드는 모든 공고를 판정(`matchAll`)하고, 유닛이 0개면 `pickBest([])`의 reduce가 던진다. 비로그인 화면은 판정을 안 해서 멀쩡했다.
+  도메인 이전(36번)과는 무관 — 단지 없는 공고가 하나라도 생기면 터지는 잠복 버그였다.
+- 고침: `matchAnnouncement`가 유닛 0개면 "확인 필요"(마감이면 "마감")를 돌려준다.
+- 검증: 임시 계정(확인 뒤 삭제)으로 헤드리스 크롬에서 운영 사이트 재현 → 로컬 빌드에서 로그인 후 /dashboard 정상.
+
 ## 아직 안 한 것 / 다음 단계 후보
 - **kr-relay 재배포**: 허용 목록에 soco.seoul.go.kr·www.i-sh.co.kr을 넣었지만 아직 배포 전(34·35번). 두 사이트는 먼저 직접 접속하므로
   해외 IP를 막지 않으면 필요 없다. GitHub 실행에서 청년안심주택·SH 수집이 403이면 `npx supabase functions deploy kr-relay --project-ref <ref> --use-api`.
