@@ -19,6 +19,14 @@ export default function PrivacyPage() {
           <p className="mt-1">공고별 신청 가능 여부와 예상 순위 계산, 마감·새 공고 알림 발송. 이 밖의 목적으로는 쓰지 않아요.</p>
         </section>
         <section>
+          <h2 className="text-base font-bold text-ink">방문 통계</h2>
+          <p className="mt-1">
+            서비스 개선을 위해 운영사 OMARU(omaru.kr)의 자체 방문 통계를 모아요. 브라우저에 무작위 방문자 번호 하나를 저장(localStorage)하고,
+            본 페이지 경로·머문 시간·들어온 경로(리퍼러)·기기와 브라우저 종류·국가와 도시(접속 위치로 추정)를 기록해요. 주소의 검색 조건(? 뒤)과
+            프로필 정보, IP 주소는 통계에 담지 않아요. 브라우저의 사이트 데이터를 지우면 방문자 번호도 함께 지워져요.
+          </p>
+        </section>
+        <section>
           <h2 className="text-base font-bold text-ink">보관과 삭제</h2>
           <p className="mt-1">회원 탈퇴 즉시 삭제해요. 비회원 빠른 필터 입력값은 서버로 보내지 않고 브라우저 탭을 닫으면 사라져요.</p>
         </section>

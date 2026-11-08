@@ -26,6 +26,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <main className="flex-1">{children}</main>
         <Footer />
         <MobileTabBar />
+        {/* OMARU 공용 방문 통계(omaru.kr/admin). 경로만 보내고 ?쿼리는 안 보낸다 */}
+        <script async src="https://omaru.kr/t.js" />
       </body>
     </html>
   );
