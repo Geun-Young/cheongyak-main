@@ -49,24 +49,34 @@ export function AnnouncementList({
   const [type, setType] = useState(initialType);
   const [sort, setSort] = useState<SortKey>("deadline");
 
+  // 지역·유형 필터를 먼저 적용한다. 탭 숫자(전체·신청 가능·…)도 고른 지역·유형 안에서 센다 —
+  // 예전엔 필터와 상관없이 전체 공고로 세서, 서울을 골라도 "전체 156"이 그대로였다(project.md 39번).
+  const filtered = useMemo(
+    () =>
+      items.filter((a) => {
+        if (region && a.region !== region && a.region !== "전국") return false;
+        if (type && a.housingType !== type) return false;
+        return true;
+      }),
+    [items, region, type],
+  );
+
   const counts = useMemo(() => {
     const c: Record<ListTab, number> = { all: 0, eligible: 0, ineligible: 0, needs_review: 0, closed: 0, urgent: 0 };
-    for (const a of items) {
+    for (const a of filtered) {
       const summary = results?.get(a.id);
       c.all += 1;
       if (summary) c[summary.best.status] += 1;
       if (isUrgent(a, summary)) c.urgent += 1;
     }
     return c;
-  }, [items, results]);
+  }, [filtered, results]);
 
   const visible = useMemo(() => {
-    const list = items.filter((a) => {
+    const list = filtered.filter((a) => {
       const summary = results?.get(a.id);
       if (tab === "urgent" && !isUrgent(a, summary)) return false;
       if (tab !== "all" && tab !== "urgent" && (summary?.best.status ?? "needs_review") !== tab) return false;
-      if (region && a.region !== region && a.region !== "전국") return false;
-      if (type && a.housingType !== type) return false;
       return true;
     });
     list.sort((x, y) => {
@@ -78,7 +88,7 @@ export function AnnouncementList({
       return ax - ay;
     });
     return list;
-  }, [items, results, tab, region, type, sort]);
+  }, [filtered, results, tab, sort]);
 
   const showTabs = Boolean(results);
 
@@ -87,7 +97,7 @@ export function AnnouncementList({
       <div className="flex flex-col gap-3 border-b border-line p-3 md:flex-row md:items-center md:justify-between md:px-4">
         {showTabs ? (
           <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="판정 상태">
-            {TABS.concat(counts.urgent > 0 ? [{ key: "urgent", label: "마감 임박" }] : []).map((t) => {
+            {TABS.concat(counts.urgent > 0 || tab === "urgent" ? [{ key: "urgent", label: "마감 임박" }] : []).map((t) => {
               const active = tab === t.key;
               return (
                 <button
