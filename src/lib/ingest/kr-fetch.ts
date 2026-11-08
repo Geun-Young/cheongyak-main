@@ -53,3 +53,20 @@ export async function krFetch(url: string, init: RequestInit = {}): Promise<Resp
   }
   return res;
 }
+
+/**
+ * 먼저 직접 부르고, 막히면(403·연결 실패) KR_RELAY=supabase일 때만 서울 중계기로 다시 부른다.
+ * 해외 IP를 막는지 확인하지 못한 사이트(청년안심주택 누리집·SH 인터넷청약, project.md 34·35번)용 —
+ * 막지 않으면 GitHub 러너에서 중계기 없이 바로 되고, 막으면 중계기 허용 목록(kr-relay ALLOWED_HOSTS)에 그 호스트가
+ * 배포돼 있어야 한다. 둘 다 안 되면 krFetch가 KrAccessError로 멈춘다(공고 데이터는 건드리지 않음).
+ */
+export async function directThenRelay(url: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    const res = await fetch(url, init);
+    if (res.status !== 403) return res;
+    if (!usingKrRelay()) return res;
+  } catch (e) {
+    if (!usingKrRelay()) throw e;
+  }
+  return krFetch(url, init);
+}

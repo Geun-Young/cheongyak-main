@@ -250,7 +250,7 @@ export interface Announcement {
 
   // --- 자동수집 메타(설계서 4장) ---
   /** 데이터 출처. "manual"은 관리자가 직접 만든 공고 */
-  source?: "myhome" | "applyhome" | "youthhome" | "manual";
+  source?: "myhome" | "applyhome" | "youthhome" | "sh" | "manual";
   sourceId?: string;
   /** "조건 정리되면 알려주세요" 버튼을 누른 회원 수. 관리자 큐 정렬 기준 */
   requestCount?: number;
